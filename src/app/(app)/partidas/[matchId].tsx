@@ -1,3 +1,4 @@
+import * as Linking from 'expo-linking';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Text, TextInput, View } from 'react-native';
@@ -18,6 +19,7 @@ import {
 } from '@/components/ui';
 import { confirmAction } from '@/lib/confirm';
 import { formatBRL, formatSlotWhen } from '@/lib/format';
+import { inviteUrl, whatsappShareUrl } from '@/lib/invite';
 import { supabase } from '@/lib/supabase';
 import {
   Court,
@@ -199,7 +201,12 @@ export default function PartidaDetalhe() {
     const { error: err } = await action();
     setBusy(false);
     if (err) {
-      setError(err.message);
+      if (err.message.includes('uq_participant_user_active')) {
+        setError('Você já tem uma vaga ativa. Veja a lista de participantes ou cancele a vaga atual para entrar de novo.');
+        await load();
+      } else {
+        setError(err.message);
+      }
       return false;
     }
     if (okMsg) setNotice(okMsg);
@@ -234,6 +241,25 @@ export default function PartidaDetalhe() {
 
   async function join(kind: SlotKind) {
     await run(() => supabase.rpc('join_match', { _match: match!.id, _kind: kind }), 'Vaga reservada! Conclua o pagamento antes de expirar.');
+  }
+
+  async function shareWhatsApp() {
+    const livresLinha = Math.max(capacity('line') - taken('line'), 0);
+    const livresGoleiro = Math.max(capacity('goalkeeper') - taken('goalkeeper'), 0);
+    const text = [
+      `⚽ ${match!.title || 'Partida de futebol'}`,
+      `${instName} · ${court!.name}`,
+      `${formatSlotWhen(slot!.slot_date, slot!.start_time, WEEKDAY_SHORT)}–${slot!.end_time.slice(0, 5)}`,
+      `Vagas livres: ${livresLinha} de linha` + (match!.goalkeeper_slots > 0 ? ` e ${livresGoleiro} de goleiro` : ''),
+      '',
+      'Entre pelo link (é preciso ter conta no app):',
+      inviteUrl(match!.id),
+    ].join('\n');
+    try {
+      await Linking.openURL(whatsappShareUrl(text));
+    } catch {
+      setError('Não foi possível abrir o WhatsApp.');
+    }
   }
 
   async function addGuest() {
@@ -304,6 +330,15 @@ export default function PartidaDetalhe() {
         )}
         {credit > 0 && <Muted>Seu crédito nesta quadra: {formatBRL(credit)}</Muted>}
       </Card>
+
+      {/* Convidar */}
+      {!finished && (
+        <Card>
+          <Text style={{ fontWeight: '800', color: colors.text, marginBottom: 8 }}>Convidar jogadores</Text>
+          <Muted>Compartilhe o link da partida. Quem ainda não tem conta cria o cadastro e já cai aqui.</Muted>
+          <Button title="Compartilhar no WhatsApp" variant="secondary" onPress={shareWhatsApp} />
+        </Card>
+      )}
 
       {/* Entrar */}
       {!finished && !myPart && (

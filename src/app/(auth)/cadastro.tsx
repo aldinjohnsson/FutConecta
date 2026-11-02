@@ -1,10 +1,13 @@
+import { Link, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
+import { View } from 'react-native';
 
-import { Banner, Button, Screen, Subtitle, TextField } from '@/components/ui';
+import { Banner, Button, Muted, Screen, Subtitle, TextField } from '@/components/ui';
 import { isAdult, parseBRDate } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
 
 export default function Cadastro() {
+  const { convite } = useLocalSearchParams<{ convite?: string }>();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -48,6 +51,9 @@ export default function Cadastro() {
 
   return (
     <Screen>
+      {convite ? (
+        <Banner kind="info">Você foi convidado para uma partida! Crie sua conta (ou entre) para garantir sua vaga.</Banner>
+      ) : null}
       <Subtitle>Preencha seus dados para começar a jogar.</Subtitle>
       {error && <Banner>{error}</Banner>}
       {info && <Banner kind="info">{info}</Banner>}
@@ -78,6 +84,13 @@ export default function Cadastro() {
       />
       <TextField label="Cidade" value={city} onChangeText={setCity} />
       <Button title="Criar conta" onPress={handleSignUp} loading={loading} />
+
+      <View style={{ alignItems: 'center', marginTop: 12 }}>
+        <Muted>Já tem conta?</Muted>
+        <Link href="/login" style={{ color: '#0B7A3E', fontWeight: '700', marginTop: 6, fontSize: 16 }}>
+          Entrar
+        </Link>
+      </View>
     </Screen>
   );
 }

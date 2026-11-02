@@ -1,7 +1,9 @@
-import { Tabs } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
+import { useEffect } from 'react';
 import { Text, View } from 'react-native';
 
 import { colors } from '@/components/ui';
+import { takePendingInvite } from '@/lib/invite';
 
 function TabIcon({ glyph, focused }: { glyph: string; focused: boolean }) {
   return (
@@ -12,6 +14,15 @@ function TabIcon({ glyph, focused }: { glyph: string; focused: boolean }) {
 }
 
 export default function AppLayout() {
+  const router = useRouter();
+
+  // convite recebido por link (WhatsApp) antes de a pessoa ter conta: ao entrar, abre a partida
+  useEffect(() => {
+    takePendingInvite().then((matchId) => {
+      if (matchId) router.replace(`/partidas/${matchId}`);
+    });
+  }, [router]);
+
   return (
     <Tabs
       screenOptions={{
