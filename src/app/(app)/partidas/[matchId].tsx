@@ -464,12 +464,15 @@ export default function PartidaDetalhe() {
           p.status === 'reserved' && it?.status === 'pending'
             ? 'Pagamento em andamento'
             : p.status === 'reserved'
-              ? `Aguardando pagamento até ${hhmm(p.hold_expires_at)}`
+              ? p.hold_expires_at
+                ? `Aguardando pagamento até ${hhmm(p.hold_expires_at)}`
+                : 'Aguardando pagamento'
               : PARTICIPANT_LABEL[p.status];
         return (
           <Card key={p.id}>
             <Text style={{ fontWeight: '700', color: colors.text }}>
-              {nameOf(p)} · {KIND_LABEL[p.kind]}
+              {nameOf(p)}
+              {p.user_id && p.user_id === match.organizer_id ? ' (organizador)' : ''} · {KIND_LABEL[p.kind]}
             </Text>
             <Muted>
               {status}
