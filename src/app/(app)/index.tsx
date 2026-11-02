@@ -1,4 +1,4 @@
-import { useFocusEffect, useRouter } from 'expo-router';
+import { Redirect, useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,9 +12,11 @@ import { formatSlotWhen } from '@/lib/format';
 import { loadMyMatches, MyMatch } from '@/lib/myMatches';
 import { WEEKDAY_SHORT } from '@/lib/types';
 import { useAuth } from '@/providers/AuthProvider';
+import { useMode } from '@/providers/ModeProvider';
 
 export default function Inicio() {
   const router = useRouter();
+  const { mode } = useMode();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const { profile, session } = useAuth();
@@ -44,6 +46,9 @@ export default function Inicio() {
 
   // quadras com horário aberto primeiro (hoje > amanhã > depois)
   const sorted = [...courts].sort((a, b) => (Object.keys(a.openByDate).sort()[0] ?? '9') .localeCompare(Object.keys(b.openByDate).sort()[0] ?? '9'));
+
+  // no modo Dono a tela inicial é a Agenda da quadra
+  if (mode === 'owner') return <Redirect href="/agenda" />;
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.bg }} contentContainerStyle={{ alignItems: 'center', paddingBottom: 24 }}>
