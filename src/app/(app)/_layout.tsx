@@ -8,8 +8,8 @@ import { ModeProvider, useMode } from '@/providers/ModeProvider';
 
 function TabIcon({ glyph, focused }: { glyph: string; focused: boolean }) {
   return (
-    <View style={{ width: 44, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: focused ? colors.navy2 : 'transparent' }}>
-      <Text style={{ fontSize: 17, opacity: focused ? 1 : 0.7 }}>{glyph}</Text>
+    <View style={{ width: 44, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: focused ? colors.primarySoft : 'transparent' }}>
+      <Text style={{ fontSize: 17, opacity: focused ? 1 : 0.75 }}>{glyph}</Text>
     </View>
   );
 }
@@ -33,10 +33,10 @@ function AppTabs() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#FFFFFF',
-        tabBarInactiveTintColor: '#8FA3CC',
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: '#64748B',
         tabBarLabelStyle: { fontSize: 10, fontWeight: '700' },
-        tabBarStyle: { backgroundColor: colors.navy, borderTopWidth: 0, paddingTop: 6, height: 66 },
+        tabBarStyle: { backgroundColor: '#FFFFFF', borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 6, height: 66 },
         sceneStyle: { backgroundColor: colors.bg },
         headerStyle: { backgroundColor: colors.navy },
         headerTintColor: '#fff',
@@ -46,9 +46,9 @@ function AppTabs() {
     >
       {/* modo Jogador */}
       <Tabs.Screen name="index" options={{ title: 'Início', href: playerTab, tabBarIcon: ({ focused }) => <TabIcon glyph="🏠" focused={focused} /> }} />
-      <Tabs.Screen name="partidas" options={{ title: 'Meus horários', href: playerTab, tabBarIcon: ({ focused }) => <TabIcon glyph="📅" focused={focused} /> }} />
-      <Tabs.Screen name="perfil" options={{ title: 'Meu perfil', href: playerTab, headerShown: true, tabBarIcon: ({ focused }) => <TabIcon glyph="👤" focused={focused} /> }} />
-      <Tabs.Screen name="explorar" options={{ title: 'Buscar quadras', href: playerTab, tabBarIcon: ({ focused }) => <TabIcon glyph="🔎" focused={focused} /> }} />
+      <Tabs.Screen name="partidas" options={{ title: 'Partidas', href: playerTab, tabBarIcon: ({ focused }) => <TabIcon glyph="🏆" focused={focused} /> }} />
+      <Tabs.Screen name="explorar" options={{ title: 'Quadras', href: playerTab, tabBarIcon: ({ focused }) => <TabIcon glyph="🏟️" focused={focused} /> }} />
+      <Tabs.Screen name="perfil" options={{ title: 'Meu perfil', tabBarLabel: 'Perfil', href: playerTab, headerShown: true, tabBarIcon: ({ focused }) => <TabIcon glyph="👤" focused={focused} /> }} />
 
       {/* modo Dono da quadra */}
       <Tabs.Screen name="agenda" options={{ title: 'Agenda', href: ownerTab, headerShown: true, tabBarIcon: ({ focused }) => <TabIcon glyph="🗓️" focused={focused} /> }} />

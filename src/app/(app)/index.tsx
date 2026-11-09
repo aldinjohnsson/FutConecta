@@ -1,34 +1,51 @@
 import { Redirect, useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import AdBanner from '@/components/AdBanner';
-import CourtCard from '@/components/CourtCard';
-import PlayerCard from '@/components/PlayerCard';
-import { Badge, Button, Card, colors, Muted, SectionHeader, Spinner } from '@/components/ui';
+import CourtRow from '@/components/CourtRow';
+import FeaturedMatchCard from '@/components/FeaturedMatchCard';
+import { Banner, Button, Card, colors, Muted, SectionHeader, Spinner } from '@/components/ui';
+import { BRAND_NAME, BRAND_TAGLINE } from '@/lib/brand';
 import { CourtCardData, loadCourtCards } from '@/lib/courts';
-import { formatSlotWhen } from '@/lib/format';
-import { loadMyMatches, MyMatch } from '@/lib/myMatches';
-import { WEEKDAY_SHORT } from '@/lib/types';
+import { FeaturedMatch, loadFeaturedMatches } from '@/lib/featured';
+import { usePlatformCommissionBps } from '@/lib/usePlatformCommission';
 import { useAuth } from '@/providers/AuthProvider';
 import { useMode } from '@/providers/ModeProvider';
 
+interface QuickAction {
+  glyph: string;
+  label: string;
+  /** rota; sem rota = ainda não disponível */
+  href?: '/explorar' | '/partidas';
+  soon?: string;
+}
+
+const QUICK_ACTIONS: QuickAction[] = [
+  { glyph: '📅', label: 'Criar Partida', href: '/explorar' },
+  { glyph: '🏟️', label: 'Quadras', href: '/explorar' },
+  { glyph: '👥', label: 'Buscar Jogadores', soon: 'A busca de jogadores chega em breve.' },
+  { glyph: '👑', label: 'Planos', soon: 'Os planos chegam em breve.' },
+];
+
 export default function Inicio() {
   const router = useRouter();
-  const { mode } = useMode();
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { mode } = useMode();
   const { profile, session } = useAuth();
+  const commissionBps = usePlatformCommissionBps();
+
   const [courts, setCourts] = useState<CourtCardData[]>([]);
-  const [matches, setMatches] = useState<MyMatch[]>([]);
+  const [featured, setFeatured] = useState<FeaturedMatch[]>([]);
   const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!session) return;
-    const [c, m] = await Promise.all([loadCourtCards().catch(() => []), loadMyMatches(session.user.id)]);
+    const [c, f] = await Promise.all([loadCourtCards().catch(() => []), loadFeaturedMatches().catch(() => [])]);
     setCourts(c);
-    setMatches(m);
+    setFeatured(f);
     setLoading(false);
   }, [session]);
 
@@ -38,89 +55,135 @@ export default function Inicio() {
     }, [load]),
   );
 
-  const firstName = profile?.full_name?.split(' ')[0] ?? '';
-  const inner = Math.min(width, 720) - 32;
-  const cols = inner >= 600 ? 2 : 1;
-  const gap = 14;
-  const cardWidth = cols === 2 ? (inner - gap) / 2 : inner;
-
-  // quadras com horário aberto primeiro (hoje > amanhã > depois)
-  const sorted = [...courts].sort((a, b) => (Object.keys(a.openByDate).sort()[0] ?? '9') .localeCompare(Object.keys(b.openByDate).sort()[0] ?? '9'));
-
   // no modo Dono a tela inicial é a Agenda da quadra
   if (mode === 'owner') return <Redirect href="/agenda" />;
 
+  // quadras da cidade do jogador primeiro; depois as com horário aberto mais cedo
+  const myCity = (profile?.city ?? '').trim().toLowerCase();
+  const nearby = [...courts].sort((a, b) => {
+    const ca = myCity && a.city.trim().toLowerCase() === myCity ? 0 : 1;
+    const cb = myCity && b.city.trim().toLowerCase() === myCity ? 0 : 1;
+    if (ca !== cb) return ca - cb;
+    return (Object.keys(a.openByDate).sort()[0] ?? '9').localeCompare(Object.keys(b.openByDate).sort()[0] ?? '9');
+  });
+
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.bg }} contentContainerStyle={{ alignItems: 'center', paddingBottom: 24 }}>
-      <View style={{ width: '100%', backgroundColor: colors.navy, paddingTop: insets.top + 14, paddingBottom: 54, alignItems: 'center', borderBottomLeftRadius: 28, borderBottomRightRadius: 28 }}>
-        <View style={{ width: '100%', maxWidth: 720, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <View>
-            <Text style={{ color: colors.sky, fontWeight: '700', fontSize: 13 }}>Bem-vindo</Text>
-            <Text style={{ color: '#fff', fontSize: 26, fontWeight: '900' }}>Olá, {firstName || 'jogador'} 👋</Text>
-            <Text style={{ color: '#B8C7E8', marginTop: 2 }}>Bora jogar hoje?</Text>
+    <ScrollView style={{ flex: 1, backgroundColor: colors.bg }} contentContainerStyle={{ alignItems: 'center', paddingBottom: 28 }}>
+      {/* Hero */}
+      <View style={{ width: '100%', backgroundColor: colors.navy, paddingTop: insets.top + 14, paddingBottom: 78, alignItems: 'center', overflow: 'hidden' }}>
+        {/* luzes de estádio (decorativo) */}
+        <View style={{ position: 'absolute', right: -70, top: -60, width: 240, height: 240, borderRadius: 120, backgroundColor: colors.primary, opacity: 0.22 }} />
+        <View style={{ position: 'absolute', left: -90, top: 70, width: 220, height: 220, borderRadius: 110, backgroundColor: colors.navy2, opacity: 0.9 }} />
+        <View style={{ position: 'absolute', right: 30, bottom: -40, width: 120, height: 120, borderRadius: 60, backgroundColor: colors.primary, opacity: 0.12 }} />
+
+        <View style={{ width: '100%', maxWidth: 720, paddingHorizontal: 16 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: colors.primary }}>
+                <Text style={{ fontSize: 24 }}>⚽</Text>
+              </View>
+              <View style={{ marginLeft: 10 }}>
+                <Text style={{ color: '#fff', fontSize: 22, fontWeight: '900', letterSpacing: 0.3 }}>{BRAND_NAME}</Text>
+                <Text style={{ color: '#B7E4C7', fontSize: 12 }}>{BRAND_TAGLINE}</Text>
+              </View>
+            </View>
+            <Pressable
+              accessibilityLabel="Notificações"
+              onPress={() => setNotice('As notificações chegam em breve.')}
+              style={{ width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.1)' }}
+            >
+              <Text style={{ fontSize: 20 }}>🔔</Text>
+            </Pressable>
           </View>
-          <Pressable onPress={() => router.push('/perfil')} style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: colors.navy2, borderWidth: 2, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center' }}>
-            <Text style={{ color: '#fff', fontWeight: '800' }}>{(profile?.full_name ?? '?').slice(0, 1).toUpperCase()}</Text>
+
+          <Text style={{ color: '#fff', fontSize: 27, fontWeight: '900', lineHeight: 33, marginTop: 26 }}>
+            Encontre partidas.{'\n'}Monte seu time.{'\n'}Reserve sua quadra.
+          </Text>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push('/partidas')}
+            style={({ pressed }) => ({
+              alignSelf: 'flex-start',
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: colors.primary,
+              paddingHorizontal: 20,
+              paddingVertical: 13,
+              borderRadius: 999,
+              marginTop: 20,
+              opacity: pressed ? 0.85 : 1,
+            })}
+          >
+            <Text style={{ fontSize: 16, marginRight: 8 }}>🔎</Text>
+            <Text style={{ color: '#fff', fontSize: 16, fontWeight: '800' }}>Buscar partidas</Text>
           </Pressable>
         </View>
       </View>
 
-      <View style={{ width: '100%', maxWidth: 720, paddingHorizontal: 16, marginTop: -34 }}>
-        <AdBanner />
+      <View style={{ width: '100%', maxWidth: 720, paddingHorizontal: 16, marginTop: -44 }}>
+        {/* Ações rápidas */}
+        <View
+          style={{
+            flexDirection: 'row',
+            backgroundColor: colors.card,
+            borderRadius: 20,
+            paddingVertical: 16,
+            paddingHorizontal: 6,
+            marginBottom: 12,
+            borderWidth: 1,
+            borderColor: colors.border,
+            shadowColor: '#08160F',
+            shadowOpacity: 0.1,
+            shadowRadius: 14,
+            shadowOffset: { width: 0, height: 6 },
+            elevation: 4,
+          }}
+        >
+          {QUICK_ACTIONS.map((a) => (
+            <Pressable
+              key={a.label}
+              accessibilityRole="button"
+              onPress={() => (a.href ? router.push(a.href) : setNotice(a.soon ?? null))}
+              style={{ flex: 1, alignItems: 'center', paddingHorizontal: 2 }}
+            >
+              <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' }}>
+                <Text style={{ fontSize: 22 }}>{a.glyph}</Text>
+              </View>
+              <Text style={{ color: colors.text, fontSize: 12, fontWeight: '700', textAlign: 'center', marginTop: 6 }}>{a.label}</Text>
+            </Pressable>
+          ))}
+        </View>
 
-        {profile && <PlayerCard profile={profile} onPressProfile={() => router.push('/perfil')} />}
+        {notice && <Banner kind="info">{notice}</Banner>}
 
-        <View style={{ height: 8 }} />
-        <SectionHeader title="Meus horários e grupos" action={matches.length ? 'Ver todos' : undefined} onAction={() => router.push('/partidas')} />
+        {/* Partidas em destaque */}
+        <SectionHeader title="Partidas em destaque" action="Ver todas" onAction={() => router.push('/partidas')} />
         {loading ? (
           <Spinner />
-        ) : matches.length === 0 ? (
+        ) : featured.length === 0 ? (
           <Card>
-            <Text style={{ fontWeight: '700', color: colors.text }}>Você ainda não tem horários marcados</Text>
-            <Muted>Escolha uma quadra abaixo, crie uma partida ou entre em uma já aberta.</Muted>
+            <Text style={{ fontWeight: '700', color: colors.text }}>Nenhuma partida aberta no momento</Text>
+            <Muted>Escolha uma quadra, reserve um horário e convide a galera.</Muted>
             <View style={{ height: 8 }} />
-            <Button title="Ver partidas abertas" variant="secondary" onPress={() => router.push('/partidas')} />
+            <Button title="Ver quadras" onPress={() => router.push('/explorar')} />
           </Card>
         ) : (
-          matches.slice(0, 3).map((m) => (
-            <Pressable key={m.id} onPress={() => router.push(`/partidas/${m.id}`)}>
-              <Card style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <View style={{ backgroundColor: colors.primarySoft, borderRadius: 14, paddingVertical: 8, paddingHorizontal: 12, alignItems: 'center', marginRight: 12 }}>
-                  <Text style={{ color: colors.navy, fontWeight: '900', fontSize: 18 }}>{m.slotDate.split('-')[2]}</Text>
-                  <Text style={{ color: colors.muted, fontSize: 11, fontWeight: '700' }}>
-                    {WEEKDAY_SHORT[new Date(`${m.slotDate}T12:00:00`).getDay()].toUpperCase()}
-                  </Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontWeight: '800', color: colors.text, fontSize: 16 }} numberOfLines={1}>
-                    {m.title || 'Partida'}
-                  </Text>
-                  <Muted>
-                    {formatSlotWhen(m.slotDate, m.startTime, WEEKDAY_SHORT).split(' · ')[1]} · {m.institutionName}
-                  </Muted>
-                  <View style={{ marginTop: 6 }}>
-                    <Badge label={m.role === 'organizer' ? 'Você organiza' : 'Você joga'} tone={m.role === 'organizer' ? 'warn' : 'info'} />
-                  </View>
-                </View>
-                <Text style={{ color: colors.muted, fontSize: 22 }}>›</Text>
-              </Card>
-            </Pressable>
-          ))
+          featured.slice(0, 3).map((m) => <FeaturedMatchCard key={m.id} data={m} commissionBps={commissionBps} />)
         )}
 
-        <SectionHeader title="Quadras disponíveis" action="Ver todas" onAction={() => router.push('/explorar')} />
+        <AdBanner />
+
+        {/* Quadras próximas */}
+        <SectionHeader title="Quadras próximas" action="Ver todas" onAction={() => router.push('/explorar')} />
         {loading ? (
           <Spinner />
-        ) : sorted.length === 0 ? (
+        ) : nearby.length === 0 ? (
           <Card>
             <Muted>Nenhuma quadra cadastrada ainda.</Muted>
           </Card>
         ) : (
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap }}>
-            {sorted.slice(0, 6).map((c) => (
-              <CourtCard key={c.courtId} data={c} width={cardWidth} />
-            ))}
-          </View>
+          nearby.slice(0, 4).map((c) => <CourtRow key={c.courtId} data={c} />)
         )}
       </View>
     </ScrollView>

@@ -12,20 +12,20 @@ import {
 } from 'react-native';
 
 export const colors = {
-  primary: '#0F2A5F', // azul-marinho (botões, destaques)
-  primaryDark: '#0A1D44',
-  primarySoft: '#E6EDFA',
+  primary: '#16A34A', // verde (botões, destaques)
+  primaryDark: '#15803D',
+  primarySoft: '#DCFCE7',
   accent: '#F5B301',
-  navy: '#0B1B3F',
-  navy2: '#13306B',
+  navy: '#08160F', // verde-escuro quase preto (cabeçalhos, hero)
+  navy2: '#12301F',
   blue: '#2563EB',
   sky: '#38BDF8',
   gold: '#F5C451',
   success: '#16A34A',
   successSoft: '#DCFCE7',
-  bg: '#F3F6FB',
+  bg: '#F3F6F4',
   card: '#FFFFFF',
-  text: '#0B1B3F',
+  text: '#0F1F17',
   muted: '#64748B',
   border: '#E2E8F0',
   danger: '#DC2626',
@@ -167,7 +167,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    shadowColor: '#0B1B3F',
+    shadowColor: '#08160F',
     shadowOpacity: 0.06,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
@@ -215,7 +215,7 @@ export function SectionHeader({ title, action, onAction }: { title: string; acti
       <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text }}>{title}</Text>
       {action ? (
         <Pressable onPress={onAction} hitSlop={8}>
-          <Text style={{ color: colors.blue, fontWeight: '700', fontSize: 14 }}>{action}</Text>
+          <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 14 }}>{action} →</Text>
         </Pressable>
       ) : null}
     </View>
