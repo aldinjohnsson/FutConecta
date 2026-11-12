@@ -3,7 +3,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { Image, Text, View } from 'react-native';
 
 import AvailabilityCard from '@/components/AvailabilityCard';
-import { Badge, Banner, Card, Chip, ChipRow, colors, Label, Muted, Screen, Spinner, Subtitle, TextField, Title } from '@/components/ui';
+import InvitePlayerModal from '@/components/InvitePlayerModal';
+import { Badge, Banner, Button, Card, Chip, ChipRow, colors, Label, Muted, Screen, Spinner, Subtitle, TextField, Title } from '@/components/ui';
 import { AvailablePlayer, loadAvailablePlayers } from '@/lib/players';
 import { FOOT_LABEL, POSITION_LABEL, PlayerPosition } from '@/lib/types';
 
@@ -20,9 +21,10 @@ function sinceLabel(iso: string | null): string {
   return `Disponível desde ${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-function PlayerRow({ p }: { p: AvailablePlayer }) {
+function PlayerRow({ p, onInvite }: { p: AvailablePlayer; onInvite: () => void }) {
   return (
-    <Card style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+    <Card>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
       {p.photoUrl ? (
         <Image source={{ uri: p.photoUrl }} style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: colors.primarySoft }} />
       ) : (
@@ -49,6 +51,10 @@ function PlayerRow({ p }: { p: AvailablePlayer }) {
         {p.note ? <Text style={{ color: colors.text, marginTop: 8, fontStyle: 'italic' }}>“{p.note}”</Text> : null}
         {p.since ? <Text style={{ color: colors.muted, fontSize: 12, marginTop: 6 }}>{sinceLabel(p.since)}</Text> : null}
       </View>
+      </View>
+      <View style={{ marginTop: 10 }}>
+        <Button title="Convidar para minha partida" onPress={onInvite} />
+      </View>
     </Card>
   );
 }
@@ -60,6 +66,8 @@ export default function Jogadores() {
   const [players, setPlayers] = useState<AvailablePlayer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [inviteTarget, setInviteTarget] = useState<AvailablePlayer | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   // espera a pessoa parar de digitar a cidade antes de buscar
   useEffect(() => {
@@ -104,6 +112,7 @@ export default function Jogadores() {
       </ChipRow>
       <TextField label="Cidade" value={city} onChangeText={setCity} placeholder="Filtrar por cidade" />
 
+      {notice && <Banner kind="info">{notice}</Banner>}
       {error && <Banner>{error}</Banner>}
       {loading ? (
         <Spinner />
@@ -118,10 +127,12 @@ export default function Jogadores() {
             </Card>
           )}
           {players.map((p) => (
-            <PlayerRow key={p.id} p={p} />
+            <PlayerRow key={p.id} p={p} onInvite={() => setInviteTarget(p)} />
           ))}
         </>
       )}
+
+      <InvitePlayerModal player={inviteTarget} onClose={() => setInviteTarget(null)} onSent={(m) => setNotice(m)} />
     </Screen>
   );
 }

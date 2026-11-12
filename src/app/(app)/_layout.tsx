@@ -65,6 +65,7 @@ function AppTabs() {
       <Tabs.Screen name="mais" options={{ title: 'Mais', headerShown: true, tabBarIcon: ({ focused }) => <TabIcon glyph="☰" focused={focused} /> }} />
       {/* telas acessadas por botões/menus (sem botão na barra) */}
       <Tabs.Screen name="admin-banners" options={{ ...NO_BUTTON, headerShown: true, title: 'Banners' }} />
+      <Tabs.Screen name="convites" options={{ ...NO_BUTTON, headerShown: true, title: 'Convites' }} />
       <Tabs.Screen name="jogadores" options={{ ...NO_BUTTON, headerShown: true, title: 'Buscar jogadores' }} />
     </Tabs>
   );

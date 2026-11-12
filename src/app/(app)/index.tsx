@@ -11,6 +11,7 @@ import { Banner, Button, Card, colors, Muted, SectionHeader, Spinner } from '@/c
 import { BRAND_NAME, BRAND_TAGLINE } from '@/lib/brand';
 import { CourtCardData, loadCourtCards } from '@/lib/courts';
 import { FeaturedMatch, loadFeaturedMatches } from '@/lib/featured';
+import { useInvitationCount } from '@/lib/useInvitationCount';
 import { usePlatformCommissionBps } from '@/lib/usePlatformCommission';
 import { useAuth } from '@/providers/AuthProvider';
 import { useMode } from '@/providers/ModeProvider';
@@ -36,6 +37,7 @@ export default function Inicio() {
   const { mode } = useMode();
   const { profile, session } = useAuth();
   const commissionBps = usePlatformCommissionBps();
+  const invitations = useInvitationCount();
 
   const [courts, setCourts] = useState<CourtCardData[]>([]);
   const [featured, setFeatured] = useState<FeaturedMatch[]>([]);
@@ -89,11 +91,16 @@ export default function Inicio() {
               </View>
             </View>
             <Pressable
-              accessibilityLabel="Notificações"
-              onPress={() => setNotice('As notificações chegam em breve.')}
+              accessibilityLabel={invitations > 0 ? `Convites: ${invitations}` : 'Convites'}
+              onPress={() => router.push('/convites')}
               style={{ width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.1)' }}
             >
               <Text style={{ fontSize: 20 }}>🔔</Text>
+              {invitations > 0 && (
+                <View style={{ position: 'absolute', right: -2, top: -2, minWidth: 20, height: 20, paddingHorizontal: 5, borderRadius: 10, backgroundColor: colors.danger, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.navy }}>
+                  <Text style={{ color: '#fff', fontSize: 11, fontWeight: '900' }}>{invitations}</Text>
+                </View>
+              )}
             </Pressable>
           </View>
 
@@ -155,6 +162,16 @@ export default function Inicio() {
             </Pressable>
           ))}
         </View>
+
+        {invitations > 0 && (
+          <Card>
+            <Text style={{ fontWeight: '800', color: colors.text }}>
+              ✉️ Você tem {invitations} convite{invitations === 1 ? '' : 's'} para jogar
+            </Text>
+            <View style={{ height: 8 }} />
+            <Button title="Ver convites" onPress={() => router.push('/convites')} />
+          </Card>
+        )}
 
         <AvailabilityCard compact />
 

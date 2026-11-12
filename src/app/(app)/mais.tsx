@@ -52,6 +52,7 @@ export default function Mais() {
         />
       )}
       {mode === 'owner' && <Row glyph="👤" title="Meu perfil" subtitle="Seus dados e senha" onPress={() => router.push('/perfil')} />}
+      <Row glyph="✉️" title="Convites recebidos" subtitle="Organizadores que chamaram você para jogar" onPress={() => router.push('/convites')} />
       <Row glyph="🙋" title="Estou disponível para jogo" subtitle="Ligue para aparecer em Buscar Jogadores" onPress={() => router.push('/jogadores')} />
       <Row
         glyph="🔑"
