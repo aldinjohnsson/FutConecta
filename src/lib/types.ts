@@ -14,6 +14,10 @@ export interface Profile {
   positions: PlayerPosition[];
   must_change_password: boolean;
   suspended_at: string | null;
+  /** "Estou disponível para jogo" (ausente até a migration de disponibilidade ser aplicada) */
+  available_to_play?: boolean;
+  available_since?: string | null;
+  available_note?: string | null;
 }
 
 export interface Institution {

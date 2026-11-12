@@ -14,13 +14,20 @@ function TabIcon({ glyph, focused }: { glyph: string; focused: boolean }) {
   );
 }
 
+/**
+ * Esconde só o BOTÃO da aba. Não usar `href: null`: nesta versão do Expo Router isso marca a rota como
+ * "hidden" e navegar até ela redireciona para o início (quebrava Mais > Minha quadra, Agenda > partida etc.).
+ */
+const NO_BUTTON = { tabBarButton: () => null, tabBarItemStyle: { display: 'none' as const } };
+const hideIf = (hidden: boolean) => (hidden ? NO_BUTTON : {});
+
 function AppTabs() {
   const router = useRouter();
   const { mode } = useMode();
   const owner = mode === 'owner';
-  // abas de um modo ficam escondidas (href: null) no outro, mas as rotas continuam existindo
-  const playerTab = owner ? null : undefined;
-  const ownerTab = owner ? undefined : null;
+  // abas de um modo ficam sem botão no outro, mas as rotas continuam navegáveis
+  const hidePlayer = hideIf(owner);
+  const hideOwner = hideIf(!owner);
 
   // convite recebido por link (WhatsApp) antes de a pessoa ter conta: ao entrar, abre a partida
   useEffect(() => {
@@ -45,19 +52,20 @@ function AppTabs() {
       }}
     >
       {/* modo Jogador */}
-      <Tabs.Screen name="index" options={{ title: 'Início', href: playerTab, tabBarIcon: ({ focused }) => <TabIcon glyph="🏠" focused={focused} /> }} />
-      <Tabs.Screen name="partidas" options={{ title: 'Partidas', href: playerTab, tabBarIcon: ({ focused }) => <TabIcon glyph="🏆" focused={focused} /> }} />
-      <Tabs.Screen name="explorar" options={{ title: 'Quadras', href: playerTab, tabBarIcon: ({ focused }) => <TabIcon glyph="🏟️" focused={focused} /> }} />
-      <Tabs.Screen name="perfil" options={{ title: 'Meu perfil', tabBarLabel: 'Perfil', href: playerTab, headerShown: true, tabBarIcon: ({ focused }) => <TabIcon glyph="👤" focused={focused} /> }} />
+      <Tabs.Screen name="index" options={{ title: 'Início', ...hidePlayer, tabBarIcon: ({ focused }) => <TabIcon glyph="🏠" focused={focused} /> }} />
+      <Tabs.Screen name="partidas" options={{ title: 'Partidas', ...hidePlayer, tabBarIcon: ({ focused }) => <TabIcon glyph="🏆" focused={focused} /> }} />
+      <Tabs.Screen name="explorar" options={{ title: 'Quadras', ...hidePlayer, tabBarIcon: ({ focused }) => <TabIcon glyph="🏟️" focused={focused} /> }} />
+      <Tabs.Screen name="perfil" options={{ title: 'Meu perfil', tabBarLabel: 'Perfil', ...hidePlayer, headerShown: true, tabBarIcon: ({ focused }) => <TabIcon glyph="👤" focused={focused} /> }} />
 
       {/* modo Dono da quadra */}
-      <Tabs.Screen name="agenda" options={{ title: 'Agenda', href: ownerTab, headerShown: true, tabBarIcon: ({ focused }) => <TabIcon glyph="🗓️" focused={focused} /> }} />
-      <Tabs.Screen name="pagamentos" options={{ title: 'Pagamentos', href: ownerTab, headerShown: true, tabBarIcon: ({ focused }) => <TabIcon glyph="💰" focused={focused} /> }} />
-      <Tabs.Screen name="quadra" options={{ title: 'Quadras', href: ownerTab, tabBarIcon: ({ focused }) => <TabIcon glyph="🏟️" focused={focused} /> }} />
+      <Tabs.Screen name="agenda" options={{ title: 'Agenda', ...hideOwner, headerShown: true, tabBarIcon: ({ focused }) => <TabIcon glyph="🗓️" focused={focused} /> }} />
+      <Tabs.Screen name="pagamentos" options={{ title: 'Pagamentos', ...hideOwner, headerShown: true, tabBarIcon: ({ focused }) => <TabIcon glyph="💰" focused={focused} /> }} />
+      <Tabs.Screen name="quadra" options={{ title: 'Quadras', ...hideOwner, tabBarIcon: ({ focused }) => <TabIcon glyph="🏟️" focused={focused} /> }} />
 
       <Tabs.Screen name="mais" options={{ title: 'Mais', headerShown: true, tabBarIcon: ({ focused }) => <TabIcon glyph="☰" focused={focused} /> }} />
-      {/* telas acessadas pelo menu "Mais" (sem botão na barra) */}
-      <Tabs.Screen name="admin-banners" options={{ href: null, headerShown: true, title: 'Banners' }} />
+      {/* telas acessadas por botões/menus (sem botão na barra) */}
+      <Tabs.Screen name="admin-banners" options={{ ...NO_BUTTON, headerShown: true, title: 'Banners' }} />
+      <Tabs.Screen name="jogadores" options={{ ...NO_BUTTON, headerShown: true, title: 'Buscar jogadores' }} />
     </Tabs>
   );
 }

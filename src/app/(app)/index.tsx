@@ -4,6 +4,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import AdBanner from '@/components/AdBanner';
+import AvailabilityCard from '@/components/AvailabilityCard';
 import CourtRow from '@/components/CourtRow';
 import FeaturedMatchCard from '@/components/FeaturedMatchCard';
 import { Banner, Button, Card, colors, Muted, SectionHeader, Spinner } from '@/components/ui';
@@ -18,14 +19,14 @@ interface QuickAction {
   glyph: string;
   label: string;
   /** rota; sem rota = ainda não disponível */
-  href?: '/explorar' | '/partidas';
+  href?: '/explorar' | '/partidas' | '/jogadores';
   soon?: string;
 }
 
 const QUICK_ACTIONS: QuickAction[] = [
   { glyph: '📅', label: 'Criar Partida', href: '/explorar' },
   { glyph: '🏟️', label: 'Quadras', href: '/explorar' },
-  { glyph: '👥', label: 'Buscar Jogadores', soon: 'A busca de jogadores chega em breve.' },
+  { glyph: '👥', label: 'Buscar Jogadores', href: '/jogadores' },
   { glyph: '👑', label: 'Planos', soon: 'Os planos chegam em breve.' },
 ];
 
@@ -154,6 +155,8 @@ export default function Inicio() {
             </Pressable>
           ))}
         </View>
+
+        <AvailabilityCard compact />
 
         {notice && <Banner kind="info">{notice}</Banner>}
 

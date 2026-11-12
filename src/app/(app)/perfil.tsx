@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 
+import AvailabilityCard from '@/components/AvailabilityCard';
 import PlayerCard from '@/components/PlayerCard';
 
 import { Banner, Button, Card, Chip, ChipRow, Label, Muted, Screen, TextField } from '@/components/ui';
@@ -62,6 +63,7 @@ export default function Perfil() {
     <Screen>
       {profile && <PlayerCard profile={profile} />}
       <View style={{ height: 16 }} />
+      <AvailabilityCard />
       <Muted>{profile?.email}</Muted>
       <Card style={{ marginTop: 16 }}>
         {message && <Banner kind={message.kind}>{message.text}</Banner>}
