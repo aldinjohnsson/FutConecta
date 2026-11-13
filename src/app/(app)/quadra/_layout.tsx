@@ -15,6 +15,8 @@ export default function QuadraLayout() {
     >
       <Stack.Screen name="index" options={{ title: 'Minha quadra' }} />
       <Stack.Screen name="nova-quadra" options={{ title: 'Nova quadra' }} />
+      <Stack.Screen name="editar-quadra" options={{ title: 'Editar quadra' }} />
+      <Stack.Screen name="editar-perfil" options={{ title: 'Perfil da quadra' }} />
       <Stack.Screen name="[courtId]" options={{ title: 'Quadra' }} />
     </Stack>
   );

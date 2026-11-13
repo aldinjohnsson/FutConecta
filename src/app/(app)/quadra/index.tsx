@@ -34,7 +34,7 @@ export default function MinhaQuadra() {
       .maybeSingle();
     setInstitution((inst as Institution | null) ?? null);
     if (inst) {
-      const { data: cs } = await supabase.from('courts').select('*').eq('institution_id', inst.id).order('name');
+      const { data: cs } = await supabase.from('courts').select('*').eq('institution_id', inst.id).eq('active', true).order('name');
       setCourts((cs ?? []) as Court[]);
     }
     setLoading(false);
@@ -100,12 +100,14 @@ export default function MinhaQuadra() {
         {institution.city}
         {institution.address ? ` · ${institution.address}` : ''}
       </Subtitle>
+      {institution.legal_name ? <Muted>Nome empresarial: {institution.legal_name}</Muted> : null}
 
       {institution.photo_url ? (
         <Image source={{ uri: institution.photo_url }} style={{ width: '100%', height: 150, borderRadius: 16, marginBottom: 10 }} resizeMode="cover" />
       ) : null}
       {error && <Banner>{error}</Banner>}
       <Button title={institution.photo_url ? 'Trocar capa da quadra' : 'Adicionar capa da quadra'} variant="secondary" onPress={changeCover} />
+      <Button title="Editar perfil da quadra" variant="secondary" onPress={() => router.push('/quadra/editar-perfil')} />
       <Button title="+ Nova quadra" onPress={() => router.push('/quadra/nova-quadra')} />
 
       {courts.length === 0 && (
@@ -121,6 +123,9 @@ export default function MinhaQuadra() {
               {c.sport} · até {c.capacity} jogadores
             </Muted>
             <Text style={{ color: colors.primary, fontWeight: '700', marginTop: 8 }}>Gerenciar horários →</Text>
+            <Text onPress={() => router.push(`/quadra/editar-quadra?courtId=${c.id}`)} style={{ color: colors.muted, fontWeight: '700', marginTop: 8 }}>
+              Editar ou excluir quadra
+            </Text>
           </Card>
         </Pressable>
       ))}

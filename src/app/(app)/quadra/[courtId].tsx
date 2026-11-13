@@ -1,4 +1,4 @@
-import { useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
@@ -30,6 +30,7 @@ import { usePlatformCommissionBps } from '@/lib/usePlatformCommission';
 
 export default function QuadraDetalhe() {
   const { courtId } = useLocalSearchParams<{ courtId: string }>();
+  const router = useRouter();
   const commissionBps = usePlatformCommissionBps();
 
   const [court, setCourt] = useState<Court | null>(null);
@@ -146,6 +147,7 @@ export default function QuadraDetalhe() {
       <Muted>
         {court.sport} · até {court.capacity} jogadores · acréscimo fora do app {court.offline_surcharge_bps / 100}%
       </Muted>
+      <Button title="Editar ou excluir quadra" variant="secondary" onPress={() => router.push(`/quadra/editar-quadra?courtId=${court.id}`)} />
       <View style={{ height: 12 }} />
       {message && <Banner kind={message.kind}>{message.text}</Banner>}
 

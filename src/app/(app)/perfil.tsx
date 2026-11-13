@@ -15,6 +15,7 @@ const FEET = Object.keys(FOOT_LABEL) as PreferredFoot[];
 export default function Perfil() {
   const { profile, session, refreshProfile, signOut } = useAuth();
   const [fullName, setFullName] = useState('');
+  const [athleteName, setAthleteName] = useState('');
   const [city, setCity] = useState('');
   const [positions, setPositions] = useState<PlayerPosition[]>([]);
   const [foot, setFoot] = useState<PreferredFoot | null>(null);
@@ -24,6 +25,7 @@ export default function Perfil() {
   useEffect(() => {
     if (!profile) return;
     setFullName(profile.full_name);
+    setAthleteName(profile.athlete_name ?? '');
     setCity(profile.city ?? '');
     setPositions(profile.positions ?? []);
     setFoot(profile.preferred_foot);
@@ -55,6 +57,12 @@ export default function Perfil() {
       setMessage({ kind: 'error', text: 'Não foi possível salvar. Tente novamente.' });
       return;
     }
+    const { error: e2 } = await supabase.rpc('set_athlete_name', { _name: athleteName });
+    if (e2) {
+      setMessage({ kind: 'error', text: 'Perfil salvo, mas o nome de atleta exige aplicar a migration de perfis no Supabase.' });
+      await refreshProfile();
+      return;
+    }
     await refreshProfile();
     setMessage({ kind: 'info', text: 'Perfil atualizado.' });
   }
@@ -67,7 +75,9 @@ export default function Perfil() {
       <Muted>{profile?.email}</Muted>
       <Card style={{ marginTop: 16 }}>
         {message && <Banner kind={message.kind}>{message.text}</Banner>}
+        <Label>Perfil de atleta</Label>
         <TextField label="Nome completo" value={fullName} onChangeText={setFullName} />
+        <TextField label="Nome de atleta (para competir)" value={athleteName} onChangeText={setAthleteName} placeholder="Como aparece nas escalações" />
         <TextField label="Cidade" value={city} onChangeText={setCity} />
 
         <Label>Posições que você joga</Label>

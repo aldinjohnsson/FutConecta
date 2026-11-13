@@ -18,6 +18,7 @@ export interface Profile {
   available_to_play?: boolean;
   available_since?: string | null;
   available_note?: string | null;
+  athlete_name?: string | null; // nome de atleta (competições)
 }
 
 export interface Institution {
@@ -31,6 +32,7 @@ export interface Institution {
   photo_url: string | null;
   description: string | null;
   active: boolean;
+  legal_name?: string | null; // nome empresarial
 }
 
 export interface Court {
