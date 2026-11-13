@@ -112,7 +112,7 @@ export default function PartidaDetalhe() {
     }
     const row = m as unknown as Match & {
       courts: Court;
-      institutions: { name: string; photo_url: string | null; address: string | null; city: string | null };
+      institutions: { name: string; photo_url: string | null; address: string | null; city: string | null; owner_id: string };
       court_slots: Slot;
     };
     setMatch(row);
