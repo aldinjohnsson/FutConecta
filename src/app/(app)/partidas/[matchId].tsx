@@ -76,6 +76,7 @@ export default function PartidaDetalhe() {
   const [instName, setInstName] = useState('');
   const [instPhoto, setInstPhoto] = useState<string | null>(null);
   const [instPlace, setInstPlace] = useState<string | null>(null);
+  const [isCourtOwner, setIsCourtOwner] = useState(false); // dono da quadra: só ele confere pagamento e encerra
   const [slot, setSlot] = useState<Slot | null>(null);
   const [parts, setParts] = useState<Participant[]>([]);
   const [names, setNames] = useState<Record<string, string>>({});
@@ -102,7 +103,7 @@ export default function PartidaDetalhe() {
     if (!matchId) return;
     const { data: m } = await supabase
       .from('matches')
-      .select('*, courts(*), institutions(name,photo_url,address,city), court_slots(slot_date,start_time,end_time)')
+      .select('*, courts(*), institutions(name,photo_url,address,city,owner_id), court_slots(slot_date,start_time,end_time)')
       .eq('id', matchId)
       .maybeSingle();
     if (!m) {
@@ -118,6 +119,7 @@ export default function PartidaDetalhe() {
     setCourt(row.courts);
     setInstName(row.institutions?.name ?? '');
     setInstPhoto(row.institutions?.photo_url ?? null);
+    setIsCourtOwner(row.institutions?.owner_id === me);
     setInstPlace([row.institutions?.address, row.institutions?.city].filter(Boolean).join(' · ') || null);
     setSlot(row.court_slots);
 
@@ -543,7 +545,7 @@ export default function PartidaDetalhe() {
                     <Button title="Cancelar vaga" variant="secondary" loading={busy} onPress={() => cancel(p)} />
                   )}
 
-                  {!finished && match.accepts_manual_payment && ['reserved', 'confirmed'].includes(p.status) && it?.status !== 'paid' && (
+                  {!finished && isCourtOwner && match.accepts_manual_payment && ['reserved', 'confirmed'].includes(p.status) && it?.status !== 'paid' && (
                     <Button
                       title="Marcar como pago (manual)"
                       loading={busy}
@@ -572,9 +574,10 @@ export default function PartidaDetalhe() {
               );
             })}
 
-            {/* Painel de quem gerencia */}
+            {/* Painel: só o dono da quadra */}
+            {isCourtOwner && (
             <Card>
-              <Text style={{ fontWeight: '800', color: colors.text, marginBottom: 6 }}>Painel do organizador / quadra</Text>
+              <Text style={{ fontWeight: '800', color: colors.text, marginBottom: 6 }}>Painel da quadra</Text>
               {summary && (
                 <>
                   <Muted>
@@ -597,6 +600,7 @@ export default function PartidaDetalhe() {
                 />
               )}
             </Card>
+            )}
           </>
         )}
       </View>
