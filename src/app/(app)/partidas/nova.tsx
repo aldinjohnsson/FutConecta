@@ -77,7 +77,6 @@ export default function NovaPartida() {
   async function submit() {
     setError(null);
     if (nLine < 2) return setError('Defina ao menos 2 jogadores de linha.');
-    if (nLine > slot!.max_players) return setError(`O horário comporta no máximo ${slot!.max_players} jogadores de linha.`);
 
     setSaving(true);
     const { data, error: err } = await supabase.rpc('create_match', {
@@ -106,7 +105,7 @@ export default function NovaPartida() {
 
       <Card>
         <Muted>Valor do horário definido pela quadra: {formatBRL(slot.price_cents)}</Muted>
-        <Muted>Máximo de {slot.max_players} jogadores de linha</Muted>
+        <Muted>A quadra comporta {slot.max_players} na linha, mas você pode definir mais ou menos.</Muted>
       </Card>
 
       <TextField label="Nome da partida (opcional)" value={title} onChangeText={setTitle} placeholder="Racha de terça" />
