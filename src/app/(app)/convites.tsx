@@ -4,18 +4,23 @@ import { Text, View } from 'react-native';
 
 import { Badge, Banner, Button, Card, colors, Muted, Screen, Spinner, Subtitle, Title } from '@/components/ui';
 import { formatSlotWhen } from '@/lib/format';
-import { inviteErrorText, loadMyInvitations, ReceivedInvitation, respondInvitation } from '@/lib/invites';
+import { inviteErrorText, loadMyInvitations, loadMyNotices, markNoticesRead, MatchNotice, ReceivedInvitation, respondInvitation } from '@/lib/invites';
 import { KIND_LABEL, WEEKDAY_SHORT } from '@/lib/types';
 
 export default function Convites() {
   const router = useRouter();
   const [list, setList] = useState<ReceivedInvitation[]>([]);
+  const [notices, setNotices] = useState<MatchNotice[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    loadMyNotices().then((n) => {
+      setNotices(n);
+      if (n.length) markNoticesRead(); // visto: some do contador, mas fica listado até sair da tela
+    });
     try {
       setList(await loadMyInvitations());
     } catch (e) {
@@ -55,6 +60,13 @@ export default function Convites() {
     <Screen>
       <Title>Convites</Title>
       <Subtitle>Organizadores que chamaram você para jogar.</Subtitle>
+      {notices.map((n) => (
+        <Card key={n.id}>
+          <Text style={{ fontWeight: '800', color: colors.text }}>🔔 Aviso</Text>
+          <Muted>{n.message}</Muted>
+          <Button title="Ver partida" variant="secondary" onPress={() => router.push(`/partidas/${n.matchId}`)} />
+        </Card>
+      ))}
       {error && <Banner>{error}</Banner>}
       {notice && <Banner kind="info">{notice}</Banner>}
 

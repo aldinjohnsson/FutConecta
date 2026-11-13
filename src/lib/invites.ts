@@ -162,3 +162,27 @@ export function inviteErrorText(message: string): string {
   }
   return message;
 }
+
+export interface MatchNotice {
+  id: string;
+  matchId: string;
+  message: string;
+  createdAt: string;
+}
+
+/** Avisos não lidos para quem gerencia partidas (ex.: jogador desistiu). Vazio se a migration não existir. */
+export async function loadMyNotices(): Promise<MatchNotice[]> {
+  const { data, error } = await supabase.rpc('list_my_notices');
+  if (error) return [];
+  return ((data ?? []) as { id: string; match_id: string; message: string; created_at: string }[]).map((r) => ({
+    id: r.id,
+    matchId: r.match_id,
+    message: r.message,
+    createdAt: r.created_at,
+  }));
+}
+
+export async function markNoticesRead() {
+  await supabase.rpc('mark_notices_read');
+  notifyInvitesChanged();
+}

@@ -1,7 +1,7 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 
-import { loadMyInvitations, onInvitesChanged } from '@/lib/invites';
+import { loadMyInvitations, loadMyNotices, onInvitesChanged } from '@/lib/invites';
 import { useAuth } from '@/providers/AuthProvider';
 
 /**
@@ -14,8 +14,8 @@ export function useInvitationCount() {
 
   const refresh = useCallback(() => {
     if (!session) return;
-    loadMyInvitations()
-      .then((list) => setCount(list.length))
+    Promise.all([loadMyInvitations().catch(() => []), loadMyNotices()])
+      .then(([inv, notices]) => setCount(inv.length + notices.length))
       .catch(() => setCount(0));
   }, [session]);
 

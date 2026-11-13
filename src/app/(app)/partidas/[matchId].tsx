@@ -287,7 +287,7 @@ export default function PartidaDetalhe() {
   const checkout = () => checkoutIds(selectedPayable.map((p) => p.id));
 
   async function cancel(p: Participant, own = false) {
-    const yes = await confirmAction(own ? 'Cancelar a sua vaga nesta partida?' : `Cancelar a vaga de ${nameOf(p)}?`, 'Cancelar vaga');
+    const yes = await confirmAction(own ? 'Desistir da sua vaga? O organizador será avisado.' : `Cancelar a vaga de ${nameOf(p)}?`, 'Cancelar vaga');
     if (!yes) return;
     await run(() => supabase.rpc('cancel_participation', { _participant: p.id }), 'Vaga cancelada.');
   }
@@ -405,7 +405,6 @@ export default function PartidaDetalhe() {
             <Card>
               <InfoRow glyph="📅" label="Data e horário" value={when} />
               <InfoRow glyph="📍" label="Local" value={instName} sub={[court.name, instPlace].filter(Boolean).join(' · ')} />
-              {match.rules ? <InfoRow glyph="📝" label="Regras" value={match.rules} /> : null}
             </Card>
 
             {joinCard}
@@ -428,7 +427,7 @@ export default function PartidaDetalhe() {
                 {!myPaid && match.accepts_manual_payment && <Muted>Prefere pagar na quadra? Fale com o organizador.</Muted>}
 
                 {['reserved', 'confirmed'].includes(myPart.status) && (
-                  <Button title="Cancelar minha vaga" variant="secondary" loading={busy} onPress={() => cancel(myPart, true)} />
+                  <Button title="Desistir da vaga" variant="secondary" loading={busy} onPress={() => cancel(myPart, true)} />
                 )}
               </Card>
             )}
