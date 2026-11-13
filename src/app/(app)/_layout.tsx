@@ -2,6 +2,7 @@ import { Tabs, useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { Text, View } from 'react-native';
 
+import InviteInbox from '@/components/InviteInbox';
 import { colors } from '@/components/ui';
 import { takePendingInvite } from '@/lib/invite';
 import { ModeProvider, useMode } from '@/providers/ModeProvider';
@@ -37,6 +38,7 @@ function AppTabs() {
   }, [router]);
 
   return (
+    <>
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -68,6 +70,8 @@ function AppTabs() {
       <Tabs.Screen name="convites" options={{ ...NO_BUTTON, headerShown: true, title: 'Convites' }} />
       <Tabs.Screen name="jogadores" options={{ ...NO_BUTTON, headerShown: true, title: 'Buscar jogadores' }} />
     </Tabs>
+    <InviteInbox />
+    </>
   );
 }
 

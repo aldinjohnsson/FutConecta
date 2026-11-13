@@ -107,8 +107,22 @@ export function invitePlayer(matchId: string, userId: string, kind: SlotKind) {
   return supabase.rpc('invite_player', { _match: matchId, _user: userId, _kind: kind });
 }
 
-export function respondInvitation(invitationId: string, accept: boolean) {
-  return supabase.rpc('respond_invitation', { _invitation: invitationId, _accept: accept });
+// avisa as telas (contador do Início etc.) quando a lista de convites muda
+const listeners = new Set<() => void>();
+export function onInvitesChanged(cb: () => void): () => void {
+  listeners.add(cb);
+  return () => {
+    listeners.delete(cb);
+  };
+}
+export function notifyInvitesChanged() {
+  listeners.forEach((cb) => cb());
+}
+
+export async function respondInvitation(invitationId: string, accept: boolean) {
+  const res = await supabase.rpc('respond_invitation', { _invitation: invitationId, _accept: accept });
+  if (!res.error) notifyInvitesChanged();
+  return res;
 }
 
 /** Convites pendentes que o usuário recebeu (de partidas futuras). */

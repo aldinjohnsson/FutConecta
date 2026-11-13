@@ -5,7 +5,9 @@ import { Image, Text, View } from 'react-native';
 import AvailabilityCard from '@/components/AvailabilityCard';
 import InvitePlayerModal from '@/components/InvitePlayerModal';
 import { Badge, Banner, Button, Card, Chip, ChipRow, colors, Label, Muted, Screen, Spinner, Subtitle, TextField, Title } from '@/components/ui';
+import { loadManageableMatches } from '@/lib/invites';
 import { AvailablePlayer, loadAvailablePlayers } from '@/lib/players';
+import { useAuth } from '@/providers/AuthProvider';
 import { FOOT_LABEL, POSITION_LABEL, PlayerPosition } from '@/lib/types';
 
 const POSITIONS = Object.keys(POSITION_LABEL) as PlayerPosition[];
@@ -21,7 +23,7 @@ function sinceLabel(iso: string | null): string {
   return `Disponível desde ${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-function PlayerRow({ p, onInvite }: { p: AvailablePlayer; onInvite: () => void }) {
+function PlayerRow({ p, onInvite }: { p: AvailablePlayer; onInvite?: () => void }) {
   return (
     <Card>
       <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
@@ -52,9 +54,11 @@ function PlayerRow({ p, onInvite }: { p: AvailablePlayer; onInvite: () => void }
         {p.since ? <Text style={{ color: colors.muted, fontSize: 12, marginTop: 6 }}>{sinceLabel(p.since)}</Text> : null}
       </View>
       </View>
-      <View style={{ marginTop: 10 }}>
-        <Button title="Convidar para minha partida" onPress={onInvite} />
-      </View>
+      {onInvite && (
+        <View style={{ marginTop: 10 }}>
+          <Button title="Convidar para minha partida" onPress={onInvite} />
+        </View>
+      )}
     </Card>
   );
 }
@@ -68,6 +72,8 @@ export default function Jogadores() {
   const [error, setError] = useState<string | null>(null);
   const [inviteTarget, setInviteTarget] = useState<AvailablePlayer | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const { session } = useAuth();
+  const [canInvite, setCanInvite] = useState(false); // só quem organiza uma partida futura pode convidar
 
   // espera a pessoa parar de digitar a cidade antes de buscar
   useEffect(() => {
@@ -78,6 +84,7 @@ export default function Jogadores() {
   const load = useCallback(async () => {
     try {
       setError(null);
+      if (session) loadManageableMatches(session.user.id).then((m) => setCanInvite(m.length > 0)).catch(() => setCanInvite(false));
       setPlayers(await loadAvailablePlayers({ position, city: debouncedCity }));
     } catch (e) {
       const msg = (e as { message?: string }).message ?? '';
@@ -88,7 +95,7 @@ export default function Jogadores() {
       );
     }
     setLoading(false);
-  }, [position, debouncedCity]);
+  }, [position, debouncedCity, session]);
 
   useFocusEffect(
     useCallback(() => {
@@ -112,6 +119,7 @@ export default function Jogadores() {
       </ChipRow>
       <TextField label="Cidade" value={city} onChangeText={setCity} placeholder="Filtrar por cidade" />
 
+      {!canInvite && <Muted>Para convidar, crie uma partida primeiro: o botão de convite aparece nos jogadores.</Muted>}
       {notice && <Banner kind="info">{notice}</Banner>}
       {error && <Banner>{error}</Banner>}
       {loading ? (
@@ -127,7 +135,7 @@ export default function Jogadores() {
             </Card>
           )}
           {players.map((p) => (
-            <PlayerRow key={p.id} p={p} onInvite={() => setInviteTarget(p)} />
+            <PlayerRow key={p.id} p={p} onInvite={canInvite ? () => setInviteTarget(p) : undefined} />
           ))}
         </>
       )}

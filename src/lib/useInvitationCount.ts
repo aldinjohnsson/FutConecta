@@ -1,26 +1,30 @@
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
-import { loadMyInvitations } from '@/lib/invites';
+import { loadMyInvitations, onInvitesChanged } from '@/lib/invites';
 import { useAuth } from '@/providers/AuthProvider';
 
-/** Quantidade de convites pendentes do usuário (recarrega ao focar a tela). 0 se o recurso não existir ainda. */
+/**
+ * Quantidade de convites pendentes do usuário. Recarrega ao focar a tela e quando a lista muda
+ * (convite novo detectado, aceito ou recusado). Fica 0 se o recurso ainda não existir no banco.
+ */
 export function useInvitationCount() {
   const { session } = useAuth();
   const [count, setCount] = useState(0);
 
+  const refresh = useCallback(() => {
+    if (!session) return;
+    loadMyInvitations()
+      .then((list) => setCount(list.length))
+      .catch(() => setCount(0));
+  }, [session]);
+
   useFocusEffect(
     useCallback(() => {
-      if (!session) return;
-      let alive = true;
-      loadMyInvitations()
-        .then((list) => alive && setCount(list.length))
-        .catch(() => alive && setCount(0));
-      return () => {
-        alive = false;
-      };
-    }, [session]),
+      refresh();
+    }, [refresh]),
   );
+  useEffect(() => onInvitesChanged(refresh), [refresh]);
 
   return count;
 }
