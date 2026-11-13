@@ -17,7 +17,7 @@ import {
   TextField,
   Title,
 } from '@/components/ui';
-import { formatBRL, formatSlotWhen, parseBRLToCents, playerPaysCents } from '@/lib/format';
+import { formatBRL, formatSlotWhen, playerPaysCents } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
 import { Court, CourtSlot, WEEKDAY_SHORT } from '@/lib/types';
 import { usePlatformCommissionBps } from '@/lib/usePlatformCommission';
@@ -35,12 +35,9 @@ export default function NovaPartida() {
 
   const [title, setTitle] = useState('');
   const [lineSlots, setLineSlots] = useState('');
-  const [gkSlots, setGkSlots] = useState('0');
-  const [linePrice, setLinePrice] = useState('');
-  const [gkPrice, setGkPrice] = useState('0');
+  const [gkSlots, setGkSlots] = useState('2');
+  const [gkFree, setGkFree] = useState(true); // goleiro é gratuito (já marcado)
   const [rules, setRules] = useState('');
-  const [acceptsApp, setAcceptsApp] = useState(true);
-  const [acceptsManual, setAcceptsManual] = useState(true);
 
   useEffect(() => {
     (async () => {
@@ -51,9 +48,7 @@ export default function NovaPartida() {
         setSlot(sl);
         const { data: c } = await supabase.from('courts').select('*').eq('id', sl.court_id).maybeSingle();
         setCourt((c as Court | null) ?? null);
-        // sugestão: divide o valor do horário entre os jogadores
         setLineSlots(String(sl.max_players));
-        setLinePrice(((Math.ceil(sl.price_cents / sl.max_players)) / 100).toFixed(2).replace('.', ','));
       }
       setLoading(false);
     })();
@@ -70,18 +65,19 @@ export default function NovaPartida() {
 
   const nLine = Number(lineSlots) || 0;
   const nGk = Number(gkSlots) || 0;
-  const pLine = parseBRLToCents(linePrice) ?? 0;
-  const pGk = parseBRLToCents(gkPrice) ?? 0;
-  const expected = nLine * pLine + nGk * pGk;
-  const belowSlotPrice = expected < slot.price_cents;
+  // o valor por vaga vem do horário da quadra: valor do horário dividido entre os jogadores de linha
+  const pLine = nLine > 0 ? Math.ceil(slot.price_cents / nLine) : 0;
+  const pGk = gkFree ? 0 : pLine;
+  const teams = Math.floor(nLine / 5);
+  const acceptsApp = court.accepts_app_payment ?? true;
+  const acceptsManual = court.accepts_manual_payment ?? true;
+  const appPays = playerPaysCents(pLine, court.commission_mode, commissionBps);
+  const MANUAL_EXTRA = 150; // pagamento manual: sempre R$ 1,50 a mais que no app
 
   async function submit() {
     setError(null);
-    if (nLine + nGk < 1) return setError('Defina ao menos uma vaga.');
-    if (nLine + nGk > slot!.max_players) return setError(`O horário comporta no máximo ${slot!.max_players} jogadores.`);
-    if (parseBRLToCents(linePrice) === null) return setError('Valor da vaga de linha inválido.');
-    if (parseBRLToCents(gkPrice) === null) return setError('Valor da vaga de goleiro inválido.');
-    if (!acceptsApp && !acceptsManual) return setError('Escolha ao menos uma forma de pagamento.');
+    if (nLine < 2) return setError('Defina ao menos 2 jogadores de linha.');
+    if (nLine > slot!.max_players) return setError(`O horário comporta no máximo ${slot!.max_players} jogadores de linha.`);
 
     setSaving(true);
     const { data, error: err } = await supabase.rpc('create_match', {
@@ -110,49 +106,29 @@ export default function NovaPartida() {
 
       <Card>
         <Muted>Valor do horário definido pela quadra: {formatBRL(slot.price_cents)}</Muted>
-        <Muted>Máximo de {slot.max_players} jogadores</Muted>
+        <Muted>Máximo de {slot.max_players} jogadores de linha</Muted>
       </Card>
 
       <TextField label="Nome da partida (opcional)" value={title} onChangeText={setTitle} placeholder="Racha de terça" />
-      <TextField label="Vagas de linha" value={lineSlots} onChangeText={setLineSlots} keyboardType="number-pad" />
-      <TextField
-        label="Valor por vaga de linha (o que a quadra recebe)"
-        value={linePrice}
-        onChangeText={setLinePrice}
-        keyboardType="decimal-pad"
-        placeholder="15,00"
-      />
-      <TextField label="Vagas de goleiro" value={gkSlots} onChangeText={setGkSlots} keyboardType="number-pad" />
-      <TextField
-        label="Valor por vaga de goleiro (0 = gratuita)"
-        value={gkPrice}
-        onChangeText={setGkPrice}
-        keyboardType="decimal-pad"
-      />
+      <TextField label="Jogadores de linha" value={lineSlots} onChangeText={setLineSlots} keyboardType="number-pad" />
+      {teams >= 2 && <Muted>{nLine} na linha = {teams} times de 5 (os goleiros não entram nos times).</Muted>}
 
-      {belowSlotPrice && (
-        <Banner kind="warn">
-          A soma das vagas ({formatBRL(expected)}) é menor que o valor do horário ({formatBRL(slot.price_cents)}).
-          Quem cobre a diferença é você, o organizador.
-        </Banner>
-      )}
+      <Label>Goleiros</Label>
+      <TextField label="Quantidade de goleiros" value={gkSlots} onChangeText={setGkSlots} keyboardType="number-pad" />
+      <ChipRow>
+        <Chip label={gkFree ? 'Goleiro é gratuito ✓' : 'Goleiro é gratuito'} selected={gkFree} onPress={() => setGkFree(!gkFree)} />
+      </ChipRow>
+      <Muted>Os goleiros são escolhidos na hora do jogo.</Muted>
 
       <Card>
-        <Text style={{ fontWeight: '700', color: colors.text }}>Quanto o jogador paga</Text>
+        <Text style={{ fontWeight: '700', color: colors.text }}>Quanto cada jogador de linha paga</Text>
+        <Muted>Valor definido pela quadra: {formatBRL(slot.price_cents)} dividido entre {nLine || '…'} jogadores.</Muted>
+        {acceptsApp && <Muted>Pelo app: {formatBRL(appPays)}</Muted>}
+        {acceptsManual && <Muted>Na quadra (manual): {formatBRL(appPays + MANUAL_EXTRA)} (R$ 1,50 a mais que no app)</Muted>}
         <Muted>
-          Pelo app: {formatBRL(playerPaysCents(pLine, court.commission_mode, commissionBps))} por vaga de linha
-        </Muted>
-        <Muted>
-          Fora do app: {formatBRL(Math.round(pLine * (1 + court.offline_surcharge_bps / 10000)))} por vaga de linha
-          (acréscimo de {court.offline_surcharge_bps / 100}%)
+          Formas de pagamento definidas pela quadra: {[acceptsApp && 'app', acceptsManual && 'manual'].filter(Boolean).join(' e ')}.
         </Muted>
       </Card>
-
-      <Label>Formas de pagamento aceitas</Label>
-      <ChipRow>
-        <Chip label="Pelo app" selected={acceptsApp} onPress={() => setAcceptsApp(!acceptsApp)} />
-        <Chip label="Manual (na quadra)" selected={acceptsManual} onPress={() => setAcceptsManual(!acceptsManual)} />
-      </ChipRow>
 
       <TextField
         label="Regras (opcional)"

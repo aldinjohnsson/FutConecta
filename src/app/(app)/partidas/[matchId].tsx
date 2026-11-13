@@ -88,7 +88,7 @@ export default function PartidaDetalhe() {
   const [sandbox, setSandbox] = useState(false);
   const [canManage, setCanManage] = useState(false);
   const [summary, setSummary] = useState<Summary | null>(null);
-  const [teams, setTeams] = useState<{ a: string[]; b: string[] } | null>(null);
+  const [teams, setTeams] = useState<string[][] | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -304,19 +304,16 @@ export default function PartidaDetalhe() {
       const j = Math.floor(Math.random() * (i + 1));
       [arr[i], arr[j]] = [arr[j], arr[i]];
     }
-    const half = Math.ceil(arr.length / 2);
-    setTeams({ a: arr.slice(0, half), b: arr.slice(half) });
+    const k = Math.max(2, Math.floor(arr.length / 5)); // 15 na linha = 3 times
+    const out: string[][] = Array.from({ length: k }, () => []);
+    arr.forEach((n, i) => out[i % k].push(n));
+    setTeams(out);
   }
   async function shareTeams() {
     if (!teams) return;
     const text = [
       `⚽ Escalação · ${match!.title || court!.name} · ${when}`,
-      '',
-      'TIME A',
-      ...teams.a.map((n, i) => `${i + 1}. ${n}`),
-      '',
-      'TIME B',
-      ...teams.b.map((n, i) => `${i + 1}. ${n}`),
+      ...teams.flatMap((t, ti) => ['', `TIME ${String.fromCharCode(65 + ti)}`, ...t.map((n, i) => `${i + 1}. ${n}`)]),
     ].join('\n');
     try {
       await Linking.openURL(whatsappShareUrl(text));
@@ -401,6 +398,7 @@ export default function PartidaDetalhe() {
               </View>
             );
           })}
+        {match.goalkeeper_slots > 0 && <Muted>🧤 {match.goalkeeper_slots} goleiro(s): escolhidos na hora do jogo.</Muted>}
         </Card>
 
         {/* Minha vaga */}
@@ -506,14 +504,14 @@ export default function PartidaDetalhe() {
             {confirmed.length >= 2 && (
               <Card>
                 <Text style={{ fontWeight: '900', fontSize: 16, color: colors.text, marginBottom: 4 }}>Escalação</Text>
-                <Muted>Sorteia os times com os confirmados ({confirmed.length}).</Muted>
+                <Muted>Sorteia os times com os confirmados da linha ({confirmed.length}). Goleiros são escolhidos na hora.</Muted>
                 <Button title={teams ? 'Sortear de novo' : 'Gerar times'} variant={teams ? 'secondary' : 'primary'} onPress={drawTeams} />
                 {teams && (
                   <>
-                    <View style={{ flexDirection: 'row', gap: 10, marginVertical: 8 }}>
-                      {([['TIME A', teams.a], ['TIME B', teams.b]] as const).map(([label, list]) => (
-                        <View key={label} style={{ flex: 1, backgroundColor: colors.primarySoft, borderRadius: 14, padding: 12 }}>
-                          <Text style={{ fontWeight: '900', color: colors.primary, marginBottom: 4 }}>{label}</Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginVertical: 8 }}>
+                      {teams.map((list, ti) => (
+                        <View key={ti} style={{ flexGrow: 1, flexBasis: 140, backgroundColor: colors.primarySoft, borderRadius: 14, padding: 12 }}>
+                          <Text style={{ fontWeight: '900', color: colors.primary, marginBottom: 4 }}>TIME {String.fromCharCode(65 + ti)}</Text>
                           {list.map((n, i) => (
                             <Text key={n + i} style={{ color: colors.text, marginVertical: 1 }}>
                               {i + 1}. {n}

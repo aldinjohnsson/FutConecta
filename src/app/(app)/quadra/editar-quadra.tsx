@@ -17,6 +17,8 @@ export default function EditarQuadra() {
   const [mode, setMode] = useState<CommissionMode>('absorb');
   const [surcharge, setSurcharge] = useState('2');
   const [cancelHours, setCancelHours] = useState('24');
+  const [acceptsApp, setAcceptsApp] = useState(true);
+  const [acceptsManual, setAcceptsManual] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,6 +39,8 @@ export default function EditarQuadra() {
           setMode(c.commission_mode);
           setSurcharge(String(c.offline_surcharge_bps / 100));
           setCancelHours(String(c.free_cancel_hours));
+          setAcceptsApp(c.accepts_app_payment ?? true);
+          setAcceptsManual(c.accepts_manual_payment ?? true);
         }
         setLoading(false);
       });
@@ -51,6 +55,7 @@ export default function EditarQuadra() {
     if (!Number.isInteger(cap) || cap <= 0) return setError('Capacidade inválida.');
     if (!Number.isFinite(sur) || sur < 0 || sur > 50) return setError('O acréscimo deve ficar entre 0% e 50%.');
     if (!Number.isInteger(hours) || hours < 0) return setError('Prazo de cancelamento inválido.');
+    if (!acceptsApp && !acceptsManual) return setError('Escolha ao menos uma forma de pagamento.');
     setSaving(true);
     const { error: err } = await supabase.rpc('update_court', {
       _id: courtId,
@@ -62,7 +67,9 @@ export default function EditarQuadra() {
       _offline_surcharge_bps: Math.round(sur * 100),
       _free_cancel_hours: hours,
     });
+    const pay = err ? null : await supabase.rpc('set_court_payment_methods', { _id: courtId, _app: acceptsApp, _manual: acceptsManual });
     setSaving(false);
+    if (pay?.error) return setError('Aplique a migration de formas de pagamento no Supabase.');
     if (err) return setError(/update_court|schema cache/i.test(err.message) ? 'Aplique a migration de edição no Supabase.' : err.message);
     router.back();
   }
@@ -94,6 +101,13 @@ export default function EditarQuadra() {
         <Chip label="Repassar ao jogador" selected={mode === 'pass_to_player'} onPress={() => setMode('pass_to_player')} />
       </ChipRow>
       <Muted>Vale para novos pagamentos; os já feitos não mudam.</Muted>
+
+      <Label>Formas de pagamento aceitas nas partidas desta quadra</Label>
+      <ChipRow>
+        <Chip label="Pelo app" selected={acceptsApp} onPress={() => setAcceptsApp(!acceptsApp)} />
+        <Chip label="Manual (na quadra)" selected={acceptsManual} onPress={() => setAcceptsManual(!acceptsManual)} />
+      </ChipRow>
+      <Muted>Pagamento manual custa R$ 1,50 a mais por jogador que no app.</Muted>
 
       <TextField label="Acréscimo para pagamento fora do app (%)" value={surcharge} onChangeText={setSurcharge} keyboardType="decimal-pad" />
       <TextField label="Cancelamento gratuito até (horas antes)" value={cancelHours} onChangeText={setCancelHours} keyboardType="number-pad" />

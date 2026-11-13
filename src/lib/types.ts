@@ -46,6 +46,8 @@ export interface Court {
   offline_surcharge_bps: number;
   free_cancel_hours: number;
   active: boolean;
+  accepts_app_payment?: boolean; // definido pelo dono da quadra
+  accepts_manual_payment?: boolean;
 }
 
 export interface AvailabilityRule {
