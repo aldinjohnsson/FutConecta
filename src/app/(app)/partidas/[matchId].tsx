@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Text, TextInput, View } from 'react-native';
 
 import MatchHero, { InfoRow } from '@/components/MatchHero';
-import { Banner, Button, Card, Chip, ChipRow, colors, Label, Muted, Screen, Spinner } from '@/components/ui';
+import { Banner, Button, Card, Chip, ChipRow, colors, Muted, Screen, Spinner } from '@/components/ui';
 import { confirmAction } from '@/lib/confirm';
 import { formatBRL, formatSlotWhen } from '@/lib/format';
 import { inviteUrl, whatsappShareUrl } from '@/lib/invite';
@@ -88,6 +88,7 @@ export default function PartidaDetalhe() {
   const [sandbox, setSandbox] = useState(false);
   const [canManage, setCanManage] = useState(false);
   const [summary, setSummary] = useState<Summary | null>(null);
+  const [teams, setTeams] = useState<{ a: string[]; b: string[] } | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -127,7 +128,7 @@ export default function PartidaDetalhe() {
     const list = (ps ?? []) as Participant[];
     setParts(list);
 
-    const userIds = Array.from(new Set(list.map((p) => p.user_id).filter(Boolean))) as string[];
+    const userIds = Array.from(new Set([...list.map((p) => p.user_id), row.organizer_id].filter(Boolean))) as string[];
     if (userIds.length) {
       const { data: pr } = await supabase.from('profiles').select('id,full_name').in('id', userIds);
       const map: Record<string, string> = {};
@@ -218,34 +219,41 @@ export default function PartidaDetalhe() {
     );
   }
 
+  // ---- regras da partida ----
   const active = parts.filter(isActive);
-  const taken = (k: SlotKind) => active.filter((p) => p.kind === k).length;
-  const capacity = (k: SlotKind) => (k === 'line' ? match.line_slots : match.goalkeeper_slots);
-  const isFull = (k: SlotKind) => taken(k) >= capacity(k);
-  const myPart = active.find((p) => p.user_id === me);
+  const lineActive = active.filter((p) => p.kind === 'line'); // goleiro não entra no racha
+  const myPart = lineActive.find((p) => p.user_id === me);
   const itemOf = (pid: string) => items.find((i) => i.participant_id === pid && ['paid', 'pending'].includes(i.status));
   const nameOf = (p: Participant) => (p.user_id ? names[p.user_id] ?? 'Jogador' : `${p.guest_name} (convidado)`);
   const finished = match.status !== 'scheduled';
+  const locked = !!match.confirmed_at;
+  const seats = match.line_slots;
+  const quorum = match.min_players ?? seats;
+  const confirmed = lineActive.filter((p) => ['confirmed', 'attended', 'no_show'].includes(p.status));
+  const organizerName = names[match.organizer_id] ?? 'organizador';
 
-  // participações que eu posso pagar agora
-  const payable = active.filter(
-    (p) => p.status === 'reserved' && (p.user_id === me || p.added_by === me) && !itemOf(p.id),
+  const startAt = new Date(`${slot.slot_date}T${slot.start_time}`);
+  const endAt = new Date(`${slot.slot_date}T${slot.end_time}`);
+  const payOpensAt = new Date(endAt.getTime() - 10 * 60 * 1000); // pagamento liberado 10 min antes do fim
+  const payOpen = Date.now() >= payOpensAt.getTime();
+
+  // minhas vagas que já podem ser pagas (confirmou presença e ainda não pagou)
+  const payable = lineActive.filter(
+    (p) => ['confirmed', 'attended', 'no_show'].includes(p.status) && (p.user_id === me || p.added_by === me) && !itemOf(p.id),
   );
-  const selectedPayable = payable.filter((p) => selected.includes(p.id));
-  const totalSelected = selectedPayable.reduce((sum, p) => sum + prices[p.kind], 0);
+  const payTotal = payable.reduce((sum, p) => sum + prices[p.kind], 0);
+  const myItem = myPart ? itemOf(myPart.id) : undefined;
+  const myPaid = myItem?.status === 'paid';
 
-  async function join(kind: SlotKind) {
-    await run(() => supabase.rpc('join_match', { _match: match!.id, _kind: kind }), 'Vaga reservada! Conclua o pagamento antes de expirar.');
-  }
+  const when = `${formatSlotWhen(slot.slot_date, slot.start_time, WEEKDAY_SHORT)}–${slot.end_time.slice(0, 5)}`;
 
   async function shareWhatsApp() {
-    const livresLinha = Math.max(capacity('line') - taken('line'), 0);
-    const livresGoleiro = Math.max(capacity('goalkeeper') - taken('goalkeeper'), 0);
+    const free = Math.max(seats - lineActive.length, 0);
     const text = [
       `⚽ ${match!.title || 'Partida de futebol'}`,
       `${instName} · ${court!.name}`,
-      `${formatSlotWhen(slot!.slot_date, slot!.start_time, WEEKDAY_SHORT)}–${slot!.end_time.slice(0, 5)}`,
-      `Vagas livres: ${livresLinha} de linha` + (match!.goalkeeper_slots > 0 ? ` e ${livresGoleiro} de goleiro` : ''),
+      when,
+      `Vagas livres: ${free}`,
       '',
       'Entre pelo link (é preciso ter conta no app):',
       inviteUrl(match!.id),
@@ -257,17 +265,8 @@ export default function PartidaDetalhe() {
     }
   }
 
-  async function addGuest() {
-    if (!guestName.trim()) return setError('Informe o nome do convidado.');
-    const ok = await run(
-      () => supabase.rpc('join_match', { _match: match!.id, _kind: guestKind, _guest_name: guestName.trim() }),
-      'Convidado adicionado.',
-    );
-    if (ok) setGuestName('');
-  }
-
   async function checkoutIds(ids: string[]) {
-    if (ids.length === 0) return setError('Selecione ao menos uma participação para pagar.');
+    if (ids.length === 0) return setError('Não há nada para pagar agora.');
     const sorted = [...ids].sort();
     const ok = await run(
       () =>
@@ -280,274 +279,270 @@ export default function PartidaDetalhe() {
         }),
       'Pagamento criado.',
     );
-    if (ok) {
-      setSelected([]);
-      attemptKey.current = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    if (ok) attemptKey.current = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+
+  async function leave(p: Participant, own: boolean) {
+    const yes = await confirmAction(own ? 'Desistir da sua vaga? O organizador será avisado.' : `Cancelar a vaga de ${nameOf(p)}?`, 'Cancelar vaga');
+    if (yes) await run(() => supabase.rpc('cancel_participation', { _participant: p.id }), 'Vaga cancelada.');
+  }
+
+  async function lockMatch() {
+    const yes = await confirmAction('Efetivar a partida? Ela passa a ser confirmada e NINGUÉM mais poderá cancelar a vaga.', 'Efetivar');
+    if (yes) await run(() => supabase.rpc('lock_match', { _match: match!.id }), 'Partida efetivada!');
+  }
+
+  async function cancelMatch() {
+    const yes = await confirmAction('Cancelar a partida? Todas as vagas serão liberadas.', 'Cancelar partida');
+    if (yes) await run(() => supabase.rpc('cancel_match', { _match: match!.id }), 'Partida cancelada.');
+  }
+
+  // ---- escalação (sorteio entre os confirmados) ----
+  function drawTeams() {
+    const arr = confirmed.map(nameOf);
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    const half = Math.ceil(arr.length / 2);
+    setTeams({ a: arr.slice(0, half), b: arr.slice(half) });
+  }
+  async function shareTeams() {
+    if (!teams) return;
+    const text = [
+      `⚽ Escalação · ${match!.title || court!.name} · ${when}`,
+      '',
+      'TIME A',
+      ...teams.a.map((n, i) => `${i + 1}. ${n}`),
+      '',
+      'TIME B',
+      ...teams.b.map((n, i) => `${i + 1}. ${n}`),
+    ].join('\n');
+    try {
+      await Linking.openURL(whatsappShareUrl(text));
+    } catch {
+      setError('Não foi possível abrir o WhatsApp.');
     }
   }
 
-  const checkout = () => checkoutIds(selectedPayable.map((p) => p.id));
-
-  async function cancel(p: Participant, own = false) {
-    const yes = await confirmAction(own ? 'Desistir da sua vaga? O organizador será avisado.' : `Cancelar a vaga de ${nameOf(p)}?`, 'Cancelar vaga');
-    if (!yes) return;
-    await run(() => supabase.rpc('cancel_participation', { _participant: p.id }), 'Vaga cancelada.');
+  // ---- textos da lista ----
+  function statusOf(p: Participant): { text: string; tone: 'ok' | 'wait' | 'bad' } {
+    const it = itemOf(p.id);
+    if (it?.status === 'paid') return { text: 'pago', tone: 'ok' };
+    if (p.status === 'no_show') return { text: 'faltou · pagamento pendente', tone: 'bad' };
+    if (p.status === 'attended') return { text: 'presente', tone: 'ok' };
+    if (p.status === 'confirmed') return { text: 'confirmado', tone: 'ok' };
+    return { text: 'aguardando confirmação', tone: 'wait' };
   }
 
-  // ---- derivados da tela ----
-  const totalSeats = match.line_slots + match.goalkeeper_slots;
-  const myItem = myPart ? itemOf(myPart.id) : undefined;
-  const myPaid = myItem?.status === 'paid';
-  const payTotal = payable.reduce((sum, p) => sum + prices[p.kind], 0);
-  const when = `${formatSlotWhen(slot.slot_date, slot.start_time, WEEKDAY_SHORT)}–${slot.end_time.slice(0, 5)}`;
+  const heroBadge: { label: string; tone: 'success' | 'warn' | 'neutral' } =
+    match.status === 'cancelled'
+      ? { label: 'Cancelada', tone: 'neutral' }
+      : finished
+        ? { label: 'Encerrada', tone: 'neutral' }
+        : locked
+          ? { label: 'Partida confirmada ✓', tone: 'success' }
+          : { label: `${confirmed.length} de ${quorum} confirmados`, tone: confirmed.length >= quorum ? 'success' : 'warn' };
 
-  const heroBadge: { label: string; tone: 'success' | 'warn' | 'neutral' } = finished
-    ? { label: 'Encerrada', tone: 'neutral' }
-    : myPart
-      ? myPaid
-        ? { label: 'Pago ✓', tone: 'success' }
-        : myPart.status === 'reserved'
-          ? { label: 'Aguardando pagamento', tone: 'warn' }
-          : { label: 'Confirmado ✓', tone: 'success' }
-      : active.length >= totalSeats
-        ? { label: 'Lotada', tone: 'neutral' }
-        : { label: `Vagas: ${totalSeats - active.length} de ${totalSeats}`, tone: 'success' };
+  const sorted = [...lineActive].sort((a, b) => (a.user_id === match.organizer_id ? -1 : b.user_id === match.organizer_id ? 1 : 0));
+  const rows = Array.from({ length: seats }, (_, i) => sorted[i] ?? null);
 
-  const myStatusText = !myPart
-    ? ''
-    : myPaid
-      ? myItem?.source === 'manual'
-        ? 'Pago na quadra'
-        : 'Pago pelo app'
-      : myPart.status === 'reserved'
-        ? myItem?.status === 'pending'
-          ? 'Pagamento em andamento'
-          : myPart.hold_expires_at
-            ? `Aguardando pagamento até ${hhmm(myPart.hold_expires_at)}`
-            : 'Aguardando pagamento'
-        : PARTICIPANT_LABEL[myPart.status];
-
-  // bloco "Entrar na partida" (quem ainda não está na partida)
-  const joinCard =
-    !finished && !myPart ? (
-      <Card>
-        <Text style={{ fontWeight: '800', color: colors.text, marginBottom: 8 }}>Entrar na partida</Text>
-        {(['line', 'goalkeeper'] as SlotKind[])
-          .filter((k) => capacity(k) > 0)
-          .map((k) => {
-            const myWait = waits.find((w) => w.kind === k);
-            if (isFull(k)) {
-              if (myWait?.status === 'offered') {
-                return (
-                  <View key={k}>
-                    <Banner kind="info">
-                      Abriu uma vaga de {KIND_LABEL[k].toLowerCase()} para você até {hhmm(myWait.offer_expires_at)}.
-                    </Banner>
-                    <Button
-                      title={`Aceitar vaga de ${KIND_LABEL[k].toLowerCase()}`}
-                      loading={busy}
-                      onPress={() => run(() => supabase.rpc('accept_waitlist_offer', { _waitlist: myWait.id }), 'Vaga reservada!')}
-                    />
-                  </View>
-                );
-              }
-              return myWait ? (
-                <Muted key={k}>Você está na lista de espera de {KIND_LABEL[k].toLowerCase()}.</Muted>
-              ) : (
-                <Button
-                  key={k}
-                  title={`Lista de espera · ${KIND_LABEL[k]}`}
-                  variant="secondary"
-                  loading={busy}
-                  onPress={() => run(() => supabase.rpc('join_waitlist', { _match: match.id, _kind: k }), 'Você entrou na lista de espera.')}
-                />
-              );
-            }
-            return <Button key={k} title={`Entrar como ${KIND_LABEL[k].toLowerCase()}`} loading={busy} onPress={() => join(k)} />;
-          })}
-      </Card>
-    ) : null;
-
-  // pagamento em andamento
-  const pendingCard = pending ? (
-    <Card>
-      <Text style={{ fontWeight: '800', color: colors.text }}>Pagamento em aberto</Text>
-      <Muted>
-        Total: {formatBRL(pending.amount_cents)}
-        {pending.credit_used_cents > 0 ? ` (crédito usado: ${formatBRL(pending.credit_used_cents)})` : ''}
-      </Muted>
-      <Muted>Expira às {hhmm(pending.expires_at)}</Muted>
-      {sandbox ? (
-        <>
-          <Banner kind="warn">Modo de TESTE: nenhum dinheiro real é cobrado.</Banner>
-          <Button
-            title="Confirmar pagamento de teste"
-            loading={busy}
-            onPress={() => run(() => supabase.rpc('sandbox_confirm_payment', { _payment: pending.id }), 'Pagamento confirmado (teste).')}
-          />
-        </>
-      ) : (
-        <Banner kind="info">O pagamento por Pix e cartão (Asaas) será liberado na próxima etapa.</Banner>
-      )}
-    </Card>
-  ) : null;
+  const tone = { ok: colors.primary, wait: '#B45309', bad: '#DC2626' };
 
   return (
     <Screen padded={false}>
-      <MatchHero photoUrl={instPhoto} title={match.title || 'Partida'} subtitle={`${instName} · ${court.name}`} badge={heroBadge} />
+      <MatchHero photoUrl={instPhoto} title={court.name} subtitle={`${instName} · organizada por ${organizerName}`} badge={heroBadge} />
 
       <View style={{ padding: 16, paddingTop: 18 }}>
         {error && <Banner>{error}</Banner>}
         {notice && <Banner kind="info">{notice}</Banner>}
-        {finished && <Banner kind="warn">Esta partida foi encerrada.</Banner>}
+        {match.status === 'cancelled' && <Banner kind="warn">Esta partida foi cancelada.</Banner>}
+        {match.status === 'finished' && <Banner kind="warn">Esta partida foi encerrada.</Banner>}
 
-        {!canManage ? (
-          /* ================= Visão do jogador: simples ================= */
-          <>
-            <Card>
-              <InfoRow glyph="📅" label="Data e horário" value={when} />
-              <InfoRow glyph="📍" label="Local" value={instName} sub={[court.name, instPlace].filter(Boolean).join(' · ')} />
-            </Card>
+        <Card>
+          <InfoRow glyph="📅" label="Data e horário" value={when} />
+          <InfoRow glyph="📍" label="Local" value={instName} sub={[court.name, instPlace].filter(Boolean).join(' · ')} />
+        </Card>
 
-            {joinCard}
-            {pendingCard}
-
-            {!finished && myPart && (
-              <Card>
-                <Text style={{ fontSize: 13, color: colors.muted, fontWeight: '700' }}>SUA VAGA · {KIND_LABEL[myPart.kind].toUpperCase()}</Text>
-                <Text style={{ fontSize: 18, fontWeight: '900', color: colors.text, marginTop: 2 }}>{myStatusText}</Text>
-                {credit > 0 && <Muted>Seu crédito nesta quadra: {formatBRL(credit)}</Muted>}
-                <View style={{ height: 8 }} />
-
-                {!pending && payable.length > 0 && match.accepts_app_payment && (
-                  <Button
-                    title={payTotal === 0 ? 'Confirmar minha vaga' : `Pagar ${formatBRL(payTotal)}`}
-                    loading={busy}
-                    onPress={() => checkoutIds(payable.map((p) => p.id))}
-                  />
+        {/* Lista de jogadores */}
+        <Card>
+          <Text style={{ fontWeight: '900', fontSize: 16, color: colors.text, marginBottom: 6 }}>
+            Jogadores ({lineActive.length}/{seats})
+          </Text>
+          {rows.map((p, i) => {
+            const st = p ? statusOf(p) : null;
+            const isMe = p?.user_id === me;
+            return (
+              <View
+                key={p?.id ?? `vago-${i}`}
+                style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 9, borderTopWidth: i === 0 ? 0 : 1, borderTopColor: colors.border }}
+              >
+                <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: p ? colors.primarySoft : '#EEF2EF', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+                  <Text style={{ fontWeight: '800', fontSize: 12, color: p ? colors.primary : colors.muted }}>{i + 1}</Text>
+                </View>
+                {p && st ? (
+                  <Text style={{ flex: 1, color: colors.text, fontSize: 15 }}>
+                    <Text style={{ fontWeight: '800' }}>
+                      {nameOf(p)}
+                      {isMe ? ' (você)' : ''}
+                      {p.user_id === match.organizer_id ? ' (organizador)' : ''}
+                    </Text>
+                    <Text style={{ color: tone[st.tone] }}>{`  ${st.text}`}</Text>
+                  </Text>
+                ) : (
+                  <Text style={{ flex: 1, color: colors.muted, fontSize: 15, fontStyle: 'italic' }}>vago</Text>
                 )}
-                {!myPaid && match.accepts_manual_payment && <Muted>Prefere pagar na quadra? Fale com o organizador.</Muted>}
+                {/* quem gerencia cancela a vaga de outra pessoa enquanto não efetivou */}
+                {p && canManage && !finished && !locked && !isMe && ['reserved', 'confirmed'].includes(p.status) && (
+                  <Text onPress={() => leave(p, false)} style={{ color: '#DC2626', fontWeight: '700', fontSize: 13 }}>
+                    Remover
+                  </Text>
+                )}
+              </View>
+            );
+          })}
+        </Card>
 
-                {['reserved', 'confirmed'].includes(myPart.status) && (
-                  <Button title="Desistir da vaga" variant="secondary" loading={busy} onPress={() => cancel(myPart, true)} />
+        {/* Minha vaga */}
+        {!finished && myPart && (
+          <Card>
+            <Text style={{ fontWeight: '900', fontSize: 16, color: colors.text }}>Sua vaga</Text>
+            <Text style={{ color: tone[statusOf(myPart).tone], fontWeight: '800', marginTop: 2 }}>{statusOf(myPart).text}</Text>
+            <View style={{ height: 8 }} />
+
+            {myPart.status === 'reserved' && (
+              <Button
+                title="Confirmar presença"
+                loading={busy}
+                onPress={() => run(() => supabase.rpc('confirm_presence', { _participant: myPart.id }), 'Presença confirmada!')}
+              />
+            )}
+            {myPart.status === 'reserved' && <Muted>O pagamento é só depois do jogo.</Muted>}
+
+            {myPart.status === 'confirmed' && !myPaid && (
+              <Muted>
+                Você confirmou presença. Se faltar, o valor fica pendente e será cobrado.
+              </Muted>
+            )}
+
+            {/* pagamento: liberado 10 min antes do fim da partida */}
+            {payable.length > 0 && !pending && match.accepts_app_payment &&
+              (payOpen ? (
+                <Button
+                  title={payTotal === 0 ? 'Confirmar' : `Pagar ${formatBRL(payTotal)}`}
+                  loading={busy}
+                  onPress={() => checkoutIds(payable.map((p) => p.id))}
+                />
+              ) : (
+                <Muted>💳 Pagamento liberado às {hhmm(payOpensAt.toISOString())}, 10 min antes do fim da partida.</Muted>
+              ))}
+            {credit > 0 && <Muted>Seu crédito nesta quadra: {formatBRL(credit)}</Muted>}
+
+            {['reserved', 'confirmed'].includes(myPart.status) &&
+              (locked ? (
+                <Muted>Partida efetivada: não é mais possível cancelar a vaga.</Muted>
+              ) : (
+                <Button title="Desistir da vaga" variant="secondary" loading={busy} onPress={() => leave(myPart, true)} />
+              ))}
+          </Card>
+        )}
+
+        {/* pagamento em andamento */}
+        {pending && (
+          <Card>
+            <Text style={{ fontWeight: '800', color: colors.text }}>Pagamento em aberto</Text>
+            <Muted>
+              Total: {formatBRL(pending.amount_cents)}
+              {pending.credit_used_cents > 0 ? ` (crédito usado: ${formatBRL(pending.credit_used_cents)})` : ''}
+            </Muted>
+            <Muted>Expira às {hhmm(pending.expires_at)}</Muted>
+            {sandbox ? (
+              <>
+                <Banner kind="warn">Modo de TESTE: nenhum dinheiro real é cobrado.</Banner>
+                <Button
+                  title="Confirmar pagamento de teste"
+                  loading={busy}
+                  onPress={() => run(() => supabase.rpc('sandbox_confirm_payment', { _payment: pending.id }), 'Pagamento confirmado (teste).')}
+                />
+              </>
+            ) : (
+              <Banner kind="info">O pagamento por Pix e cartão (Asaas) será liberado na próxima etapa.</Banner>
+            )}
+          </Card>
+        )}
+
+        {!myPart && !canManage && !finished && (
+          <Card>
+            <Muted>A entrada nesta partida é por convite do organizador.</Muted>
+          </Card>
+        )}
+
+        {/* ===== Dono da partida ===== */}
+        {canManage && !finished && (
+          <>
+            {!locked && (
+              <Card>
+                <Text style={{ fontWeight: '900', fontSize: 16, color: colors.text, marginBottom: 4 }}>Organizar</Text>
+                {lineActive.length < seats && (
+                  <>
+                    <Muted>Chame jogadores disponíveis ou compartilhe o link.</Muted>
+                    <Button title="Buscar jogadores disponíveis" onPress={() => router.push('/jogadores')} />
+                    <Button title="Compartilhar no WhatsApp" variant="secondary" onPress={shareWhatsApp} />
+                  </>
+                )}
+                <Muted>
+                  Confirmados: {confirmed.length} de {quorum}.
+                  {confirmed.length >= quorum
+                    ? ' Pode efetivar: depois disso ninguém mais cancela.'
+                    : ' Faltam confirmações para efetivar.'}
+                </Muted>
+                <Button title="Efetivar partida" loading={busy} disabled={confirmed.length < quorum} onPress={lockMatch} />
+                {confirmed.length < quorum && (
+                  <Button title="Cancelar partida" variant="danger" loading={busy} onPress={cancelMatch} />
+                )}
+              </Card>
+            )}
+
+            {confirmed.length >= 2 && (
+              <Card>
+                <Text style={{ fontWeight: '900', fontSize: 16, color: colors.text, marginBottom: 4 }}>Escalação</Text>
+                <Muted>Sorteia os times com os confirmados ({confirmed.length}).</Muted>
+                <Button title={teams ? 'Sortear de novo' : 'Gerar times'} variant={teams ? 'secondary' : 'primary'} onPress={drawTeams} />
+                {teams && (
+                  <>
+                    <View style={{ flexDirection: 'row', gap: 10, marginVertical: 8 }}>
+                      {([['TIME A', teams.a], ['TIME B', teams.b]] as const).map(([label, list]) => (
+                        <View key={label} style={{ flex: 1, backgroundColor: colors.primarySoft, borderRadius: 14, padding: 12 }}>
+                          <Text style={{ fontWeight: '900', color: colors.primary, marginBottom: 4 }}>{label}</Text>
+                          {list.map((n, i) => (
+                            <Text key={n + i} style={{ color: colors.text, marginVertical: 1 }}>
+                              {i + 1}. {n}
+                            </Text>
+                          ))}
+                        </View>
+                      ))}
+                    </View>
+                    <Button title="Compartilhar escalação" variant="secondary" onPress={shareTeams} />
+                  </>
                 )}
               </Card>
             )}
           </>
-        ) : (
-          /* ================= Visão de quem gerencia: completa ================= */
-          <>
-            <Card>
-              <InfoRow glyph="📅" label="Data e horário" value={when} />
-              <InfoRow glyph="📍" label="Local" value={instName} sub={[court.name, instPlace].filter(Boolean).join(' · ')} />
-              {match.rules ? <InfoRow glyph="📝" label="Regras" value={match.rules} /> : null}
-            </Card>
+        )}
 
-            <Card>
-              <Text style={{ fontWeight: '800', color: colors.text, marginBottom: 6 }}>Vagas</Text>
-              <Muted>
-                Linha: {taken('line')}/{match.line_slots} · {prices.line === 0 ? 'gratuita' : formatBRL(prices.line)} pelo app
-              </Muted>
-              {match.goalkeeper_slots > 0 && (
-                <Muted>
-                  Goleiro: {taken('goalkeeper')}/{match.goalkeeper_slots} ·{' '}
-                  {prices.goalkeeper === 0 ? 'gratuita' : formatBRL(prices.goalkeeper)} pelo app
-                </Muted>
-              )}
-              {credit > 0 && <Muted>Seu crédito nesta quadra: {formatBRL(credit)}</Muted>}
-            </Card>
-
-            {/* Convidar: só quem organiza */}
-            {!finished && (
-              <Card>
-                <Text style={{ fontWeight: '800', color: colors.text, marginBottom: 8 }}>Convidar jogadores</Text>
-                <Muted>Chame jogadores disponíveis ou compartilhe o link. Quem ainda não tem conta cria o cadastro e já cai aqui.</Muted>
-                <Button title="Buscar jogadores disponíveis" onPress={() => router.push('/jogadores')} />
-                <Button title="Compartilhar no WhatsApp" variant="secondary" onPress={shareWhatsApp} />
-              </Card>
-            )}
-
-            {joinCard}
-            {pendingCard}
-
-            {/* Pagar */}
-            {!finished && payable.length > 0 && !pending && match.accepts_app_payment && (
-              <Card>
-                <Text style={{ fontWeight: '800', color: colors.text, marginBottom: 8 }}>Pagar pelo app</Text>
-                <Muted>Selecione as vagas que quer pagar (a sua e as dos convidados que você adicionou).</Muted>
-                <ChipRow>
-                  {payable.map((p) => (
-                    <Chip
-                      key={p.id}
-                      label={`${nameOf(p)} · ${prices[p.kind] === 0 ? 'grátis' : formatBRL(prices[p.kind])}`}
-                      selected={selected.includes(p.id)}
-                      onPress={() => setSelected((s) => (s.includes(p.id) ? s.filter((x) => x !== p.id) : [...s, p.id]))}
-                    />
-                  ))}
-                </ChipRow>
-                {selectedPayable.length > 0 && <Muted>Total: {formatBRL(totalSelected)}</Muted>}
-                <Button title="Ir para o pagamento" onPress={checkout} loading={busy} disabled={selectedPayable.length === 0} />
-              </Card>
-            )}
-
-            {/* Convidado (amigo sem conta) */}
-            {!finished && (
-              <Card>
-                <Text style={{ fontWeight: '800', color: colors.text, marginBottom: 8 }}>Adicionar convidado</Text>
-                <Label>Nome</Label>
-                <TextInput
-                  value={guestName}
-                  onChangeText={setGuestName}
-                  placeholder="Nome do amigo"
-                  placeholderTextColor="#9AA8A0"
-                  style={{ borderWidth: 1.5, borderColor: colors.border, borderRadius: 10, padding: 12, fontSize: 16, marginBottom: 10, backgroundColor: '#fff' }}
-                />
-                <ChipRow>
-                  {(['line', 'goalkeeper'] as SlotKind[])
-                    .filter((k) => capacity(k) > 0)
-                    .map((k) => (
-                      <Chip key={k} label={KIND_LABEL[k]} selected={guestKind === k} onPress={() => setGuestKind(k)} />
-                    ))}
-                </ChipRow>
-                <Button title="Adicionar" variant="secondary" onPress={addGuest} loading={busy} />
-              </Card>
-            )}
-
-            {/* Lista de participantes */}
-            <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text, marginVertical: 8 }}>Participantes ({active.length})</Text>
-            {active.length === 0 && (
-              <Card>
-                <Muted>Ninguém entrou ainda.</Muted>
-              </Card>
-            )}
-            {active.map((p) => {
-              const it = itemOf(p.id);
-              const status =
-                p.status === 'reserved' && it?.status === 'pending'
-                  ? 'Pagamento em andamento'
-                  : p.status === 'reserved'
-                    ? p.hold_expires_at
-                      ? `Aguardando pagamento até ${hhmm(p.hold_expires_at)}`
-                      : 'Aguardando pagamento'
-                    : PARTICIPANT_LABEL[p.status];
-              return (
-                <Card key={p.id}>
-                  <Text style={{ fontWeight: '700', color: colors.text }}>
-                    {nameOf(p)}
-                    {p.user_id && p.user_id === match.organizer_id ? ' (organizador)' : ''} · {KIND_LABEL[p.kind]}
-                  </Text>
-                  <Muted>
-                    {status}
-                    {it?.status === 'paid' ? (it.source === 'manual' ? ' · pago na quadra' : it.source === 'app' ? ' · pago pelo app' : '') : ''}
-                  </Muted>
-
-                  {!finished && ['reserved', 'confirmed'].includes(p.status) && (
-                    <Button title="Cancelar vaga" variant="secondary" loading={busy} onPress={() => cancel(p)} />
-                  )}
-
-                  {!finished && isCourtOwner && match.accepts_manual_payment && ['reserved', 'confirmed'].includes(p.status) && it?.status !== 'paid' && (
+        {/* ===== Dono da quadra ===== */}
+        {isCourtOwner && !finished && (
+          <Card>
+            <Text style={{ fontWeight: '900', fontSize: 16, color: colors.text, marginBottom: 6 }}>Dono da quadra</Text>
+            {lineActive
+              .filter((p) => ['reserved', 'confirmed', 'attended', 'no_show'].includes(p.status) && itemOf(p.id)?.status !== 'paid')
+              .map((p) => (
+                <View key={p.id} style={{ paddingVertical: 6, borderTopWidth: 1, borderTopColor: colors.border }}>
+                  <Text style={{ fontWeight: '700', color: colors.text }}>{nameOf(p)}</Text>
+                  {match.accepts_manual_payment && (
                     <Button
                       title="Marcar como pago (manual)"
+                      variant="secondary"
                       loading={busy}
                       onPress={async () => {
                         const yes = await confirmAction(`Confirmar que ${nameOf(p)} pagou na quadra?`, 'Confirmar');
@@ -555,53 +550,34 @@ export default function PartidaDetalhe() {
                       }}
                     />
                   )}
-
-                  {!finished && ['confirmed', 'attended', 'no_show'].includes(p.status) && (
+                  {Date.now() >= startAt.getTime() && ['confirmed', 'attended', 'no_show'].includes(p.status) && (
                     <ChipRow>
-                      <Chip
-                        label="Presente"
-                        selected={p.status === 'attended'}
-                        onPress={() => run(() => supabase.rpc('set_attendance', { _participant: p.id, _attended: true }))}
-                      />
-                      <Chip
-                        label="Faltou"
-                        selected={p.status === 'no_show'}
-                        onPress={() => run(() => supabase.rpc('set_attendance', { _participant: p.id, _attended: false }))}
-                      />
+                      <Chip label="Presente" selected={p.status === 'attended'} onPress={() => run(() => supabase.rpc('set_attendance', { _participant: p.id, _attended: true }))} />
+                      <Chip label="Faltou" selected={p.status === 'no_show'} onPress={() => run(() => supabase.rpc('set_attendance', { _participant: p.id, _attended: false }))} />
                     </ChipRow>
                   )}
-                </Card>
-              );
-            })}
-
-            {/* Painel: só o dono da quadra */}
-            {isCourtOwner && (
-            <Card>
-              <Text style={{ fontWeight: '800', color: colors.text, marginBottom: 6 }}>Painel da quadra</Text>
-              {summary && (
-                <>
-                  <Muted>
-                    Pagos: {summary.paid_count} · Pendentes: {summary.pending_count}
-                  </Muted>
-                  <Muted>Recebido pelo app: {formatBRL(summary.received_app_cents)}</Muted>
-                  <Muted>Recebido na quadra (manual): {formatBRL(summary.received_manual_cents)}</Muted>
-                  <Muted>Comissão da plataforma: {formatBRL(summary.commission_cents)}</Muted>
-                </>
-              )}
-              {!finished && (
-                <Button
-                  title="Encerrar partida"
-                  variant="danger"
-                  loading={busy}
-                  onPress={async () => {
-                    const yes = await confirmAction('Encerrar a partida? Depois disso não é possível marcar presença.', 'Encerrar');
-                    if (yes) await run(() => supabase.rpc('finish_match', { _match: match.id }), 'Partida encerrada.');
-                  }}
-                />
-              )}
-            </Card>
+                </View>
+              ))}
+            {summary && (
+              <View style={{ marginTop: 8 }}>
+                <Muted>
+                  Pagos: {summary.paid_count} · Pendentes: {summary.pending_count}
+                </Muted>
+                <Muted>Recebido pelo app: {formatBRL(summary.received_app_cents)}</Muted>
+                <Muted>Recebido na quadra (manual): {formatBRL(summary.received_manual_cents)}</Muted>
+                <Muted>Comissão da plataforma: {formatBRL(summary.commission_cents)}</Muted>
+              </View>
             )}
-          </>
+            <Button
+              title="Encerrar partida (já aconteceu)"
+              variant="danger"
+              loading={busy}
+              onPress={async () => {
+                const yes = await confirmAction('Encerrar a partida? Depois disso não é possível marcar presença.', 'Encerrar');
+                if (yes) await run(() => supabase.rpc('finish_match', { _match: match.id }), 'Partida encerrada.');
+              }}
+            />
+          </Card>
         )}
       </View>
     </Screen>

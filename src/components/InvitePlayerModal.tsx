@@ -2,11 +2,11 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 
-import { Badge, Banner, Button, Chip, ChipRow, colors, Label, Muted, Spinner } from '@/components/ui';
+import { Badge, Banner, Button, colors, Label, Muted, Spinner } from '@/components/ui';
 import { formatSlotWhen } from '@/lib/format';
 import { InviteStatus, inviteErrorText, invitePlayer, loadManageableMatches, loadMatchInvitationStatuses, ManageableMatch } from '@/lib/invites';
 import { AvailablePlayer } from '@/lib/players';
-import { KIND_LABEL, SlotKind, WEEKDAY_SHORT } from '@/lib/types';
+import { SlotKind, WEEKDAY_SHORT } from '@/lib/types';
 import { useAuth } from '@/providers/AuthProvider';
 
 const STATUS_TEXT: Record<InviteStatus, string> = {
@@ -32,7 +32,7 @@ export default function InvitePlayerModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [matchId, setMatchId] = useState<string | null>(null);
-  const [kind, setKind] = useState<SlotKind>('line');
+  const kind: SlotKind = 'line'; // goleiro não entra no racha
   const [status, setStatus] = useState<InviteStatus | null>(null);
   const [sending, setSending] = useState(false);
 
@@ -59,15 +59,6 @@ export default function InvitePlayerModal({
 
   const match = matches.find((m) => m.id === matchId) ?? null;
 
-  // posição sugerida: goleiro só se o jogador joga apenas de goleiro; senão linha (se houver vaga)
-  useEffect(() => {
-    if (!match || !player) return;
-    const onlyGk = player.positions.length > 0 && player.positions.every((p) => p === 'goalkeeper');
-    const prefer: SlotKind = onlyGk ? 'goalkeeper' : 'line';
-    const free = (k: SlotKind) => (k === 'line' ? match.lineFree : match.goalkeeperFree);
-    setKind(free(prefer) > 0 ? prefer : prefer === 'line' ? 'goalkeeper' : 'line');
-  }, [match, player]);
-
   // situação do convite deste jogador nesta partida
   useEffect(() => {
     if (!matchId || !player) return setStatus(null);
@@ -80,8 +71,8 @@ export default function InvitePlayerModal({
     };
   }, [matchId, player]);
 
-  const freeOf = (k: SlotKind) => (match ? (k === 'line' ? match.lineFree : match.goalkeeperFree) : 0);
-  const noSeats = match !== null && match.lineFree + match.goalkeeperFree === 0;
+  const freeOf = (_k: SlotKind) => (match ? match.lineFree : 0);
+  const noSeats = match !== null && match.lineFree === 0;
   const blocked = status === 'pending' || status === 'accepted';
 
   async function send() {
@@ -128,7 +119,7 @@ export default function InvitePlayerModal({
                 <Label>Partida</Label>
                 {matches.map((m) => {
                   const selected = m.id === matchId;
-                  const full = m.lineFree + m.goalkeeperFree === 0;
+                  const full = m.lineFree === 0;
                   return (
                     <Pressable
                       key={m.id}
@@ -148,7 +139,7 @@ export default function InvitePlayerModal({
                       </Muted>
                       <View style={{ marginTop: 6 }}>
                         <Badge
-                          label={full ? 'Sem vagas' : `Vagas livres: ${m.lineFree} linha${m.goalkeeperFree > 0 ? ` · ${m.goalkeeperFree} goleiro` : ''}`}
+                          label={full ? 'Sem vagas' : `Vagas livres: ${m.lineFree}`}
                           tone={full ? 'neutral' : 'success'}
                         />
                       </View>
@@ -156,18 +147,6 @@ export default function InvitePlayerModal({
                   );
                 })}
 
-                {match && !noSeats && (
-                  <>
-                    <Label>Vaga</Label>
-                    <ChipRow>
-                      {(['line', 'goalkeeper'] as SlotKind[])
-                        .filter((k) => freeOf(k) > 0)
-                        .map((k) => (
-                          <Chip key={k} label={KIND_LABEL[k]} selected={kind === k} onPress={() => setKind(k)} />
-                        ))}
-                    </ChipRow>
-                  </>
-                )}
                 {noSeats && <Banner kind="warn">Esta partida não tem vagas livres.</Banner>}
                 {status && STATUS_TEXT[status] ? <Banner kind={blocked ? 'info' : 'warn'}>{STATUS_TEXT[status]}</Banner> : null}
               </>

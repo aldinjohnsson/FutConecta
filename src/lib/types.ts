@@ -102,6 +102,8 @@ export interface Match {
   goalkeeper_price_cents: number;
   accepts_app_payment: boolean;
   accepts_manual_payment: boolean;
+  confirmed_at?: string | null; // partida efetivada
+  min_players?: number | null;
 }
 
 export interface Participant {
